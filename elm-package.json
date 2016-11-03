@@ -1,0 +1,36 @@
+{
+    "version": "1.0.0",
+    "summary": "helpful summary of your project, less than 80 characters",
+    "repository": "https://github.com/user/project.git",
+    "license": "BSD3",
+    "source-directories": [
+        "."
+    ],
+    "exposed-modules": [],
+    "dependencies": {
+        "Zinggi/elm-2d-game": "1.0.0 <= v < 2.0.0",
+        "Zinggi/elm-game-resources": "1.0.1 <= v < 2.0.0",
+        "akbiggs/elm-game-update": "1.1.0 <= v < 2.0.0",
+        "elm-community/easing-functions": "1.0.1 <= v < 2.0.0",
+        "elm-community/svg-extra": "1.0.0 <= v < 2.0.0",
+        "elm-lang/core": "4.0.5 <= v < 5.0.0",
+        "elm-lang/html": "1.1.0 <= v < 2.0.0",
+        "elm-lang/svg": "1.1.1 <= v < 2.0.0",
+        "elm-lang/websocket": "1.0.1 <= v < 2.0.0",
+        "etaque/elm-hexagons": "1.0.2 <= v < 2.0.0",
+        "evancz/elm-graphics": "1.0.0 <= v < 2.0.0",
+        "folkertdev/svg-path-dsl": "1.0.1 <= v < 2.0.0",
+        "fredcy/elm-defer-command": "1.0.0 <= v < 2.0.0",
+        "hoelzro/elm-drag": "1.0.0 <= v < 2.0.0",
+        "ivanceras/svgbob": "1.0.1 <= v < 2.0.0",
+        "jastice/boxes-and-bubbles": "3.0.0 <= v < 4.0.0",
+        "mgold/elm-animation": "1.0.4 <= v < 2.0.0",
+        "micktwomey/elmo-8": "1.0.2 <= v < 2.0.0",
+        "nphollon/collision": "3.0.1 <= v < 4.0.0",
+        "ohanhi/keyboard-extra": "1.1.0 <= v < 2.0.0",
+        "paramanders/elm-hexagon": "2.0.0 <= v < 3.0.0",
+        "scottcorgan/keyboard-combo": "2.0.0 <= v < 3.0.0",
+        "zaidan/elm-collision": "1.0.0 <= v < 2.0.0"
+    },
+    "elm-version": "0.17.1 <= v < 0.18.0"
+}
