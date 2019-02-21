@@ -9,7 +9,7 @@
         "NoRedInk/elm-simple-fuzzy": "1.0.0 <= v < 2.0.0",
         "NoRedInk/elm-task-extra": "2.0.0 <= v < 3.0.0",
         "VerbalExpressions/elm-verbal-expressions": "1.2.1 <= v < 2.0.0",
-        "Voronchuk/hexagons": "2.0.1 <= v < 3.0.0",
+        "Voronchuk/hexagons": "2.0.2 <= v < 3.0.0",
 
         "akbiggs/elm-effects": "3.0.0 <= v < 4.0.0",
 
@@ -22,6 +22,8 @@
         "joneshf/elm-proxy": "1.0.0 <= v < 2.0.0",
         "joneshf/elm-tagged": "1.0.0 <= v < 2.0.0",
         "joneshf/elm-these": "1.1.1 <= v < 2.0.0",
+
+        "etaque/elm-hexagons": "1.0.3 <= v < 2.0.0",
 
         "paramanders/elm-hexagon": "2.0.0 <= v < 3.0.0",
         "zaidan/elm-collision": "1.0.0 <= v < 2.0.0"

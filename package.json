@@ -1,48 +1,37 @@
 {
-	"name": "elm-maze-wars",
-	"description": "An implementation of Maze War in Elm",
-	"version": "0.0.1",
-	"license": "BSD3",
-	"author": "Gunther Enthaler <genthaler@users.noreply.github.com>",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/genthaler/elm-maze-war"
-	},
-	"bugs": {
-		"url": "https://github.com/genthaler/elm-maze-war/issues"
-	},
-	"keywords": [
-		"elm", "maze", "webgl", "game"
-	],
-	"private": true,
-	"build": "gulp package",
-	"scripts": {
-		"postinstall": "gulp clean",
-		"clean": "gulp clean",
-		"test": "gulp test",
-		"package": "gulp package",
-		"deploy": "gulp deploy",
-		"watch": "gulp watch",
-		"server": "gulp"
-	},
-	"engine-strict": true,
-	"engines": {
-		"node": ">=4.0.0"
-	},
-	"dependencies": {},
-	"devDependencies": {
-		"browser-sync": "^2.11.1",
-		"del": "^2.2.0",
-		"elm": "^0.17.0",
-		"gulp": "^3.9.0",
-		"gulp-elm": "^0.4.4",
-		"gulp-gh-pages": "^0.5.4",
-		"gulp-livereload": "^3.8.1",
-		"gulp-plumber": "^1.0.1",
-		"gulp-rename": "^1.2.2",
-		"gulp-shell": "^0.5.1",
-		"gulp-submodule": "^0.1.3",
-		"gulp-util": "^3.0.7",
-		"gulp-expect-file": "^0.0.7"
-	}
+  "name": "elm-grid-war",
+  "version": "1.0.0",
+  "description": "My homage to the hex-based strategy games of yesterday",
+  "main": "index.js",
+  "directories": {
+    "doc": "doc",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "elm-test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/genthaler/elm-grid-war.git"
+  },
+  "keywords": [
+    "elm",
+    "hex",
+    "grid",
+    "war"
+  ],
+  "author": "genthaler",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/genthaler/elm-grid-war/issues"
+  },
+  "homepage": "https://github.com/genthaler/elm-grid-war#readme",
+  "dependencies": {
+    "elm": "^0.19.0-bugfix6",
+    "parcel-bundler": "^1.11.0"
+  },
+  "devDependencies": {
+    "elm-hot": "^1.0.1",
+    "node-elm-compiler": "^5.0.1"
+  }
 }
