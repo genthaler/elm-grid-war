@@ -1,10 +1,10 @@
-module Model exposing (Msg(..), Model, Player, MouseMovement, Args, Keys)
+module Model exposing (Args, Keys, Model, MouseMovement, Msg(..), Player)
 
+import Hexagons.Grid as Grid exposing (..)
 import Keyboard.Extra
 import Math.Vector3 as Vector3
 import Time
 import Window
-import Hexagons.Grid as Grid exposing (..)
 
 
 {-| This is the applications's Model data structure.
@@ -14,7 +14,6 @@ A cell is selected with the mouse.
 The map is rotated with wasd.
 Each cell must contain a Terrain.
 Each cell may also contain a Fighter, depending on the type of Terrain and type of Fighter.
-
 -}
 type alias Model =
     { maybeWindowSize : Maybe Window.Size

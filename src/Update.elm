@@ -1,4 +1,4 @@
-module Update exposing (update, init, eyeLevel, toKeys, direction)
+module Update exposing (direction, eyeLevel, init, toKeys, update)
 
 import Keyboard.Extra
 import Math.Matrix4 as Matrix4
@@ -16,19 +16,19 @@ init { isLocked } =
         ( keyboardModel, keyboardCmd ) =
             Keyboard.Extra.init
     in
-        { player =
-            { position = Vector3.vec3 0 eyeLevel -10
-            , zoom = 0
-            , direction = direction ( degrees 90, 0 )
-            }
-        , keys = toKeys keyboardModel
-        , maybeWindowSize = Nothing
-        , message = ""
+    { player =
+        { position = Vector3.vec3 0 eyeLevel -10
+        , zoom = 0
+        , direction = direction ( degrees 90, 0 )
         }
-            ! [ Window.size
-                    |> Task.perform (always Model.Resize ( 0, 0 )) Model.Resize
-              , Cmd.map Model.KeyboardExtraMsg keyboardCmd
-              ]
+    , keys = toKeys keyboardModel
+    , maybeWindowSize = Nothing
+    , message = ""
+    }
+        ! [ Window.size
+                |> Task.perform (always Model.Resize ( 0, 0 )) Model.Resize
+          , Cmd.map Model.KeyboardExtraMsg keyboardCmd
+          ]
 
 
 {-| Take a Msg and a Model and return an updated Model
@@ -41,10 +41,10 @@ update msg model =
                 ( keyboardModel, keyboardCmd ) =
                     Keyboard.Extra.update keyMsg model.keys.keyboardModel
             in
-                { model
-                    | keys = toKeys keyboardModel
-                }
-                    ! [ Cmd.map Model.KeyboardExtraMsg keyboardCmd ]
+            { model
+                | keys = toKeys keyboardModel
+            }
+                ! [ Cmd.map Model.KeyboardExtraMsg keyboardCmd ]
 
         Model.Resize windowSize ->
             { model | maybeWindowSize = Just windowSize }
