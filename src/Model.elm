@@ -1,10 +1,32 @@
-module Model exposing (Args, Keys, Model, MouseMovement, Msg(..), Player)
+module Model exposing (Model, Msg(..), init)
 
-import Hexagons.Grid as Grid exposing (..)
-import Keyboard.Extra
-import Math.Vector3 as Vector3
-import Time
-import Window
+import Hexagons.Map exposing (..)
+
+
+init : Model
+init =
+    { map = rectangularPointyTopMap 10 10
+    , greenCells = []
+    }
+
+
+
+-- UPDATE
+
+
+{-| Users of our app can trigger messages by clicking and typing. These
+messages are fed into the `update` function as they occur, letting us react
+to them.
+-}
+type Msg
+    = NoOp
+    | SetGreen Hash
+
+
+type alias Model =
+    { map : Map
+    , greenCells : List Hash
+    }
 
 
 {-| This is the applications's Model data structure.
@@ -15,12 +37,15 @@ The map is rotated with wasd.
 Each cell must contain a Terrain.
 Each cell may also contain a Fighter, depending on the type of Terrain and type of Fighter.
 -}
-type alias Model =
-    { maybeWindowSize : Maybe Window.Size
-    , grid : Hexagons.Grid
-    , selectedCell : Hexagons.Axial
-    , highlitCell : Hexagons.Axial
-    }
+
+
+
+-- type alias Model2 =
+--     { maybeWindowSize : Maybe Window.Size
+--     , grid : Hexagons.Grid
+--     , selectedCell : Hexagons.Axial
+--     , highlitCell : Hexagons.Axial
+--     }
 
 
 type alias TileContents =
