@@ -3588,7 +3588,7 @@ pako@~1.0.5:
   resolved "https://registry.yarnpkg.com/pako/-/pako-1.0.8.tgz#6844890aab9c635af868ad5fecc62e8acbba3ea4"
   integrity sha512-6i0HVbUfcKaTv+EG8ZTr75az7GFXcLYk9UyLEg7Notv/Ma+z/UG3TCoz6GiNeOrn1E/e63I0X/Hpw18jHOTUnA==
 
-parcel-bundler@^1.11.0:
+parcel-bundler@^1.10.2, parcel-bundler@^1.11.0:
   version "1.11.0"
   resolved "https://registry.yarnpkg.com/parcel-bundler/-/parcel-bundler-1.11.0.tgz#7e821a5246d7503aebf3c1bc279b59cbb8a3d4e3"
   integrity sha512-H0w/Obx76vWiG+UtofznfcHZJBmd6JA5iCn7zrGBINyVAh+Nt/JLD6QDROghHLXfJkO4XyczsB+fO+nPbXlFfA==
@@ -3649,6 +3649,14 @@ parcel-bundler@^1.11.0:
     terser "^3.7.3"
     v8-compile-cache "^2.0.0"
     ws "^5.1.1"
+
+parcel-plugin-elm-hot@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/parcel-plugin-elm-hot/-/parcel-plugin-elm-hot-1.0.1.tgz#4100f26c24f80e44900b395cc94a3e7d7711ae34"
+  integrity sha512-m8FWKiLyh3Stu2Rg9Ud3RykBGVeXSM50u1upRudJieoR0MEhAkt1nGqJClpeQClbwTYEfG79fzKsqEte0C9hAA==
+  dependencies:
+    elm-hot "^1.0.1"
+    parcel-bundler "^1.10.2"
 
 parse-asn1@^5.0.0:
   version "5.1.4"

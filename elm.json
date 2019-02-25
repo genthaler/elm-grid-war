@@ -6,6 +6,8 @@
     "elm-version": "0.19.0",
     "dependencies": {
         "direct": {
+            "Chadtech/return": "1.0.2",
+            "Fresheyeball/elm-return": "7.0.0",
             "Voronchuk/hexagons": "3.0.2",
             "elm/browser": "1.0.1",
             "elm/core": "1.0.2",
@@ -17,13 +19,17 @@
             "elm-community/list-extra": "8.1.0",
             "elm-community/typed-svg": "5.0.1",
             "elm-community/undo-redo": "3.0.0",
+            "folkertdev/elm-state": "3.0.1",
             "joneshf/elm-tagged": "2.1.1",
             "mdgriffith/elm-ui": "1.1.0",
+            "stoeffel/elm-verify": "5.0.0",
+            "the-sett/elm-state-machines": "1.0.1",
             "the-sett/lazy-list": "1.1.1"
         },
         "indirect": {
             "avh4/elm-color": "1.0.0",
             "elm/parser": "1.1.0",
+            "elm/regex": "1.0.0",
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
             "elm/virtual-dom": "1.0.2",
