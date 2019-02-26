@@ -1,0 +1,38 @@
+{
+  "name": "elm-grid-war",
+  "version": "1.0.0",
+  "description": "My homage to the hex-based strategy games of yesterday",
+  "main": "index.js",
+  "directories": {
+    "doc": "doc",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "elm-test",
+    "prepare": "parcel build index.html",
+    "start": "parcel index.html"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/genthaler/elm-grid-war.git"
+  },
+  "keywords": [
+    "elm",
+    "hex",
+    "grid",
+    "war"
+  ],
+  "author": "genthaler",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/genthaler/elm-grid-war/issues"
+  },
+  "homepage": "https://github.com/genthaler/elm-grid-war#readme",
+  "dependencies": {
+    "elm": "^0.19.0-bugfix6",
+    "parcel-bundler": "^1.11.0"
+  },
+  "devDependencies": {
+    "node-elm-compiler": "^5.0.1"
+  }
+}
