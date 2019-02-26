@@ -68,3 +68,14 @@ Feature display a map
 Scenario display a map with one texture
 
 ```
+
+
+Tasks
+- Display basic hex grid
+- Display different perspective
+- Change perspective with keys
+- Random allocation of basic soldiers
+- Implement battle in text, use basic colours to show statuses
+- Fight over time
+- right-click for dialog to change orders
+  - UI definition
