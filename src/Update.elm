@@ -1,6 +1,17 @@
-module Update exposing (update)
+module Update exposing (init, update)
 
+import Dict
+import Hexagons.Hex
+import Hexagons.Map exposing (Hash, Map, rectangularPointyTopMap)
 import Model exposing (Model, Msg(..))
+
+
+init : Model
+init =
+    { map = rectangularPointyTopMap 10 10
+    , cells = Dict.empty
+    , selectedCell = Nothing
+    }
 
 
 update : Msg -> Model -> Model
@@ -9,5 +20,5 @@ update msg model =
         NoOp ->
             model
 
-        SetGreen cell ->
-            { model | greenCells = model.greenCells ++ [ cell ] }
+        Clicked cell ->
+            { model | selectedCell = Just cell }

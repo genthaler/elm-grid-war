@@ -11,9 +11,7 @@
     "test": "elm-test",
     "prepare": "parcel build index.html",
     "start": "parcel index.html",
-    "predeploy": "rm -rf dist && parcel build index.html --public-url /parcel-gh-pages-deploy",
     "deploy": "gh-pages -d dist"
-
   },
   "repository": {
     "type": "git",

@@ -1,31 +1,18 @@
-module Model exposing (Model, Msg(..), init)
+module Model exposing (Model, Msg(..))
 
-import Hexagons.Map exposing (..)
-
-
-init : Model
-init =
-    { map = rectangularPointyTopMap 10 10
-    , greenCells = []
-    }
+import Dict exposing (Dict)
+import Hexagons.Map exposing (Hash, Map)
 
 
-
--- UPDATE
-
-
-{-| Users of our app can trigger messages by clicking and typing. These
-messages are fed into the `update` function as they occur, letting us react
-to them.
--}
 type Msg
     = NoOp
-    | SetGreen Hash
+    | Clicked Hash
 
 
 type alias Model =
     { map : Map
-    , greenCells : List Hash
+    , cells : Dict Hash Cell
+    , selectedCell : Maybe Hash
     }
 
 
@@ -48,7 +35,7 @@ Each cell may also contain a Fighter, depending on the type of Terrain and type 
 --     }
 
 
-type alias TileContents =
+type alias Cell =
     { terrain : Terrain
     , character : Character
     }
@@ -56,13 +43,10 @@ type alias TileContents =
 
 type Terrain
     = Grass
-
-
-
--- | Rock
--- | Mountain
--- | Water
--- | Forest
+    | Rock
+    | Mountain
+    | Water
+    | Forest
 
 
 type Character

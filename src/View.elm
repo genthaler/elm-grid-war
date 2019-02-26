@@ -1,15 +1,15 @@
 module View exposing (view)
 
 import Dict
-import Hexagons.Hex exposing (..)
-import Hexagons.Layout exposing (..)
-import Hexagons.Map exposing (..)
+import Hexagons.Hex exposing (Hex)
+import Hexagons.Layout exposing (Point, orientationLayoutPointy, polygonCorners)
+import Hexagons.Map exposing (Hash, Map)
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Model exposing (Model, Msg(..))
-import Svg exposing (..)
-import Svg.Attributes exposing (..)
-import Svg.Events exposing (..)
+import Svg exposing (Svg, g, polygon, svg)
+import Svg.Attributes exposing (fill, points, stroke, strokeWidth, style, version, viewBox, x, y)
+import Svg.Events exposing (onClick)
 import Svg.Lazy exposing (lazy, lazy2, lazy3)
 
 
@@ -30,7 +30,7 @@ svgHeight =
 
 
 layout =
-    { orientation = Hexagons.Layout.orientationLayoutPointy
+    { orientation = orientationLayoutPointy
     , size = ( 20.0, 20.0 )
     , origin = ( 0.0, 0.0 )
     }
@@ -66,11 +66,6 @@ getCell ( key, hex ) =
     hex
 
 
-getCellKey : ( Hash, Hex ) -> Hash
-getCellKey ( key, hex ) =
-    key
-
-
 mapPolygonCorners : Hex -> List Point
 mapPolygonCorners =
     polygonCorners layout
@@ -88,7 +83,7 @@ hexGrid model =
         toPolygon : Hash -> String -> List (Svg Msg)
         toPolygon hexLocation cornersCoords =
             [ polygon
-                [ Svg.Attributes.style "cursor: pointer"
+                [ style "cursor: pointer"
                 , stroke "#ffff00"
                 , strokeWidth "1px"
                 , fill <|
@@ -98,8 +93,8 @@ hexGrid model =
                     else
                         "#777777"
                 , points cornersCoords
-                , Svg.Events.onClick <|
-                    SetGreen hexLocation
+                , onClick <|
+                    Clicked hexLocation
                 ]
                 []
             ]
@@ -108,7 +103,7 @@ hexGrid model =
         []
     <|
         List.map2 toSvg
-            (List.map getCellKey (Dict.toList model.map))
+            (Dict.keys model.map)
             (List.map (pointsToString << mapPolygonCorners << getCell) (Dict.toList model.map))
 
 
