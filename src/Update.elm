@@ -1,18 +1,25 @@
 module Update exposing (init, update)
 
-import Dict
+import Dict exposing (Dict)
 import Hexagons.Hex
 import Hexagons.Map exposing (Hash, Map, rectangularPointyTopMap)
-import Model exposing (Model, Msg(..))
+import Model exposing (Model, Msg(..), Cell, Terrain(..), Character(..), Team(..))
 
 
 init : Model
 init =
-    { map = rectangularPointyTopMap 10 10
-    , cells = Dict.empty
+    let  
+        initialMap : Dict Hash Hexagons.Hex.Hex
+        initialMap = rectangularPointyTopMap 10 10
+
+        initialCells : Dict Hash Cell 
+        initialCells = initialMap |> Dict.map (\k v -> {terrain= Grass, character= Peasant, team = Human})
+    in
+    { map = initialMap
+    , cells = initialCells
     , selectedCell = Nothing
     }
-
+ 
 
 update : Msg -> Model -> Model
 update msg model =

@@ -20,7 +20,7 @@ cellWidth =
 cellHeight =
     20.0
 
-
+ 
 svgWidth =
     500
 
@@ -80,21 +80,32 @@ hexGrid model =
                 []
                 (toPolygon hexLocation cornersCoords)
 
+        isSelected : Hash -> Bool
+        isSelected hash = 
+             model.selectedCell |> Maybe.map ((==) hash ) |> Maybe.withDefault False
+
+        normalCellColour hash = "#179f83"
+
+        selectedCellColour = "#777777"
+
+        cellColour hash = 
+                    if isSelected hash then
+                       selectedCellColour 
+                    else 
+                        normalCellColour hash
+
+
         toPolygon : Hash -> String -> List (Svg Msg)
-        toPolygon hexLocation cornersCoords =
+        toPolygon hash cornersCoords =
             [ polygon
                 [ style "cursor: pointer"
                 , stroke "#ffff00"
                 , strokeWidth "1px"
                 , fill <|
-                    if List.member hexLocation model.greenCells then
-                        "#179f83"
-
-                    else
-                        "#777777"
+                        cellColour hash
                 , points cornersCoords
                 , onClick <|
-                    Clicked hexLocation
+                    Clicked hash
                 ]
                 []
             ]
