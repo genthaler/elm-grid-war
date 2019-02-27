@@ -6,7 +6,7 @@ import Hexagons.Layout exposing (Point, orientationLayoutPointy, polygonCorners)
 import Hexagons.Map exposing (Hash, Map)
 import Html exposing (Html)
 import Html.Attributes as Attributes
-import Model exposing (Model, Msg(..))
+import Model exposing (Cell, Character(..), Model, Msg(..), Team(..), Terrain(..))
 import Svg exposing (Svg, g, polygon, svg)
 import Svg.Attributes exposing (fill, points, stroke, strokeWidth, style, version, viewBox, x, y)
 import Svg.Events exposing (onClick)
@@ -20,7 +20,7 @@ cellWidth =
 cellHeight =
     20.0
 
- 
+
 svgWidth =
     500
 
@@ -81,19 +81,39 @@ hexGrid model =
                 (toPolygon hexLocation cornersCoords)
 
         isSelected : Hash -> Bool
-        isSelected hash = 
-             model.selectedCell |> Maybe.map ((==) hash ) |> Maybe.withDefault False
+        isSelected hash =
+            model.selectedCell |> Maybe.map ((==) hash) |> Maybe.withDefault False
 
-        normalCellColour hash = "#179f83"
+        normalCellColour hash =
+            case
+                Dict.get hash model.cells
+                    |> Maybe.map .terrain
+                    |> Maybe.withDefault Grass
+            of
+                Grass ->
+                    "#179f83"
 
-        selectedCellColour = "#777777"
+                Rock ->
+                    "#777777"
 
-        cellColour hash = 
-                    if isSelected hash then
-                       selectedCellColour 
-                    else 
-                        normalCellColour hash
+                Mountain ->
+                    "#333333"
 
+                Water ->
+                    "#0000ff"
+
+                Forest ->
+                    "#11ff11"
+
+        selectedCellColour =
+            "#777777"
+
+        cellColour hash =
+            if isSelected hash then
+                selectedCellColour
+
+            else
+                normalCellColour hash
 
         toPolygon : Hash -> String -> List (Svg Msg)
         toPolygon hash cornersCoords =
@@ -102,7 +122,7 @@ hexGrid model =
                 , stroke "#ffff00"
                 , strokeWidth "1px"
                 , fill <|
-                        cellColour hash
+                    cellColour hash
                 , points cornersCoords
                 , onClick <|
                     Clicked hash

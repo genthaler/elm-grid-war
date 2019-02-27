@@ -1,7 +1,9 @@
-module Model exposing (Model, Msg(..), Cell, Terrain(..), Character(..), Team(..))
+module Model exposing (Cell, Character(..), Model, Msg(..), Team(..), Terrain(..), decode, encode)
 
 import Dict exposing (Dict)
 import Hexagons.Map exposing (Hash, Map)
+import Json.Decode as D
+import Json.Encode as E
 
 
 type Msg
@@ -34,6 +36,8 @@ type Terrain
 type Character
     = Peasant
 
+
+
 -- | Soldier
 -- | Archer
 -- | Knight
@@ -43,7 +47,13 @@ type Character
 -- | Catapult
 -- | Castle
 
+
 type Team
     = Human
     | AI
 
+
+encode : Int -> Model -> E.Value
+
+
+decode : String -> Model

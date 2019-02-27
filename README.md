@@ -66,11 +66,12 @@ So I'll need a way to display
 Feature display a map
 
 Scenario display a map with one texture
-
 ```
 
-
 Tasks
+- Represent different maps for easy loading.
+  - Probably easiest to use JSON & enoders & decoders. 
+  - Also want to be able to compress and Base64 it for use as a url param/anchor
 - Display basic hex grid
 - Display different perspective
 - Change perspective with keys
