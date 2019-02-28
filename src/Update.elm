@@ -38,6 +38,7 @@ init =
                         , team = Human
                         }
                     )
+        initModel
     in
     { map = initialMap
     , cells = initialCells
