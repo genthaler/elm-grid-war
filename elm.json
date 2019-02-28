@@ -28,6 +28,7 @@
             "elm-community/typed-svg": "5.0.1",
             "elm-community/undo-redo": "3.0.0",
             "folkertdev/elm-state": "3.0.1",
+            "genthaler/elm-enum": "1.0.2",
             "ianmackenzie/elm-geometry": "1.2.1",
             "ianmackenzie/elm-geometry-svg": "1.0.2",
             "joneshf/elm-tagged": "2.1.1",
