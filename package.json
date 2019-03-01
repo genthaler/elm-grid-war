@@ -9,8 +9,9 @@
   },
   "scripts": {
     "test": "elm-test",
-    "prepare": "parcel build index.html",
-    "start": "parcel index.html"
+    "start": "parcel index.html",
+    "predeploy": "parcel build index.html",
+    "deploy": "gh-pages -d dist"
   },
   "repository": {
     "type": "git",
@@ -33,6 +34,9 @@
     "parcel-bundler": "^1.11.0"
   },
   "devDependencies": {
+    "elm-test": "^0.19.0-rev5",
+    "gh-pages": "^2.0.1",
+    "gh-pages-travis": "^1.0.4",
     "node-elm-compiler": "^5.0.1"
   }
 }

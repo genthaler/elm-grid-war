@@ -1,22 +1,18 @@
 module Tests exposing (..)
 
+import Expect exposing (Expectation)
+import Fuzz exposing (Fuzzer, int, list, string)
 import Test exposing (..)
-import Expect
-
-
--- Check out http://package.elm-lang.org/packages/elm-community/elm-test/latest to learn more about testing in Elm!
-
+import Model exposing (..)
 
 all : Test
 all =
-    describe "A Test Suite"
+    describe "Model JSON"
         [ test "Addition" <|
             \_ ->
                 Expect.equal 10 (3 + 7)
         , test "String.left" <|
             \_ ->
                 Expect.equal "a" (String.left 1 "abcdefg")
-        , test "This test should fail" <|
-            \_ ->
-                Expect.fail "failed as expected!"
+        
         ]

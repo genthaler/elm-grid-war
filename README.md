@@ -59,6 +59,8 @@ Feature list in no particular order:
 - strategies
 - fog of war
 - landing page
+- map/game editor
+- Store game history? CRDT?
 
 So I'll need a way to display
 
@@ -66,11 +68,13 @@ So I'll need a way to display
 Feature display a map
 
 Scenario display a map with one texture
-
 ```
 
-
 Tasks
+- Represent different maps for easy loading.
+  - Probably easiest to use JSON & encoders & decoders. 
+  - Also want to be able to compress and Base64 it for use as a url param/anchor
+  - Will want the map editor earlier rather than later
 - Display basic hex grid
 - Display different perspective
 - Change perspective with keys
