@@ -27,10 +27,11 @@ before_script:
 
 script:
   - npm test
-  - npm run deploy
 
-env:
-  global:
-  - GH_REF: github.com/genthaler/elm-grid-war.git
-  - GITHUB_REPO: genthaler/elm-grid-war
-  - secure: ${GITHUB-TOKEN}
+deploy:
+  provider: pages
+  skip-cleanup: true
+  github-token: $GITHUB_TOKEN  # Set in the settings page of your repository, as a secure variable
+  keep-history: true
+  on:
+    branch: master
