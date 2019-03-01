@@ -26,7 +26,7 @@ init =
                                 1 ->
                                     Rock
 
-                                2 ->
+                                2 -> 
                                     Mountain
 
                                 3 ->
@@ -38,11 +38,12 @@ init =
                         , team = Human
                         }
                     )
-        initModel
     in
     { map = initialMap
     , cells = initialCells
     , selectedCell = Nothing
+    , height = 10
+    , width = 10
     }
 
 
