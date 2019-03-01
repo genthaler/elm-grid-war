@@ -3,6 +3,7 @@ module Model exposing (Cell, Character(..), Model, Msg(..), Team(..), Terrain(..
 import Dict exposing (Dict)
 import Hexagons.Map exposing (Hash, Map, rectangularPointyTopMap)
 import Json.Decode as D
+import Json.Decode.Extra as DExtra
 import Json.Encode as E
 import Json.Encode.Extra as EExtra
 
@@ -77,19 +78,22 @@ toStringTerrain terrain =
 fromStringTerrain string =
     case string of
         "Grass" ->
-            Grass
+            Ok Grass
 
         "Rock" ->
-            Rock
+            Ok Rock
 
         "Mountain" ->
-            Mountain
+            Ok Mountain
 
         "Water" ->
-            Water
+            Ok Water
 
         "Forest" ->
-            Forest
+            Ok Forest
+
+        _ ->
+            Err "Unrecognised Terrain"
 
 
 toStringCharacter character =
@@ -101,7 +105,10 @@ toStringCharacter character =
 fromStringCharacter character =
     case character of
         "Peasant" ->
-            Peasant
+            Ok Peasant
+
+        _ ->
+            Err "Unrecognised Character"
 
 
 toStringTeam team =
@@ -116,10 +123,13 @@ toStringTeam team =
 fromStringTeam team =
     case team of
         "Human" ->
-            Human
+            Ok Human
 
         "AI" ->
-            AI
+            Ok AI
+
+        _ ->
+            Err "Unrecognised Team"
 
 
 encode : Int -> Model -> String
@@ -156,30 +166,35 @@ decode =
         decodeCell : D.Decoder Cell
         decodeCell =
             D.map3 Cell
-                (D.field "terrain" (D.map fromStringTerrain D.string))
-                (D.field "character" (D.map fromStringCharacter D.string))
-                (D.field "team" (D.map fromStringTeam D.string))
-
-        triple : D.Decoder (List a)
-        triple list =
-            case list of
-                [ a, b, c ] ->
-                    succeed ( a, b, c )
-
-                _ ->
-                    fail ""
+                (D.field "terrain" (D.string |> D.andThen (DExtra.fromResult << fromStringTerrain)))
+                (D.field "character" (D.string |> D.andThen (DExtra.fromResult << fromStringCharacter)))
+                (D.field "team" (D.string |> D.andThen (DExtra.fromResult << fromStringTeam)))
 
         decodeHash : D.Decoder Hash
         decodeHash =
+            let
+                triple : List Int -> D.Decoder ( Int, Int, Int )
+                triple list =
+                    case list of
+                        [ a, b, c ] ->
+                            if a + b + c == 0 then
+                                D.succeed ( a, b, c )
+
+                            else
+                                D.fail "The sum of this hash doesn't equal zero"
+
+                        _ ->
+                            D.fail "Not a list with exactly 3 integers"
+            in
             D.list D.int
-                |> D.andThen
+                |> D.andThen triple
 
         decodeModel : D.Decoder Model
         decodeModel =
             D.map5 Model
                 decodeMap
-                (D.field "cells" decodeCell)
-                (D.field "selectedCell" D.string)
+                (D.field "cells" <| DExtra.dict2 decodeHash decodeCell)
+                (D.field "selectedCell" <| D.maybe decodeHash)
                 (D.field "height" D.int)
                 (D.field "width" D.int)
     in
