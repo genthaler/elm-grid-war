@@ -72,13 +72,10 @@ Scenario display a map with one texture
 
 Tasks
 - Represent different maps for easy loading.
-  - Probably easiest to use JSON & encoders & decoders. 
   - Also want to be able to compress and Base64 it for use as a url param/anchor
   - Will want the map editor earlier rather than later
-- Display basic hex grid
 - Display different perspective
 - Change perspective with keys
-- Random allocation of basic soldiers
 - Implement battle in text, use basic colours to show statuses
 - Fight over time
 - right-click for dialog to change orders

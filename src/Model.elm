@@ -1,4 +1,4 @@
-module Model exposing (Cell, Character(..), Model, Msg(..), Team(..), Terrain(..), encode)
+module Model exposing (Cell, Character, Class(..), Model, Msg(..), Team(..), Terrain(..), decodeModel, encodeModel)
 
 import Dict exposing (Dict)
 import Hexagons.Map exposing (Hash, Map, rectangularPointyTopMap)
@@ -11,6 +11,9 @@ import Json.Encode.Extra as EExtra
 type Msg
     = NoOp
     | Clicked Hash
+    | Export
+    | Import
+    | ExportChanged String
 
 
 type alias Model =
@@ -19,14 +22,52 @@ type alias Model =
     , selectedCell : Maybe Hash
     , height : Int
     , width : Int
+    , export : String
+    , verify : String
     }
+
+
+decodeModel : D.Decoder Model
+decodeModel =
+    D.map7 Model
+        decodeMap
+        (D.field "cells" <| DExtra.dict2 decodeHash decodeCell)
+        (D.field "selectedCell" <| D.maybe decodeHash)
+        (D.field "height" D.int)
+        (D.field "width" D.int)
+        (D.succeed "")
+        (D.succeed "adsf")
+
+
+encodeModel : Model -> E.Value
+encodeModel model =
+    E.object
+        [ ( "cells", E.dict (encodeHash >> E.encode 0) encodeCell model.cells )
+        , ( "selectedCell", EExtra.maybe encodeHash model.selectedCell )
+        , ( "height", E.int model.height )
+        , ( "width", E.int model.width )
+        ]
 
 
 type alias Cell =
     { terrain : Terrain
-    , character : Character
-    , team : Team
+    , character : Maybe Character
     }
+
+
+decodeCell : D.Decoder Cell
+decodeCell =
+    D.map2 Cell
+        (D.field "terrain" decodeTerrain)
+        (D.field "character" <| D.maybe decodeCharacter)
+
+
+encodeCell : Cell -> E.Value
+encodeCell cell =
+    E.object
+        [ ( "terrain", toStringTerrain cell.terrain |> E.string )
+        , ( "character", EExtra.maybe encodeCharacter cell.character )
+        ]
 
 
 type Terrain
@@ -35,26 +76,6 @@ type Terrain
     | Mountain
     | Water
     | Forest
-
-
-type Character
-    = Peasant
-
-
-
--- | Soldier
--- | Archer
--- | Knight
--- | Sapper
--- | Squire
--- | Dog
--- | Catapult
--- | Castle
-
-
-type Team
-    = Human
-    | AI
 
 
 toStringTerrain terrain =
@@ -96,14 +117,44 @@ fromStringTerrain string =
             Err "Unrecognised Terrain"
 
 
-toStringCharacter character =
-    case character of
+decodeTerrain =
+    D.string |> D.andThen (DExtra.fromResult << fromStringTerrain)
+
+
+type alias Character =
+    { class : Class
+    , team : Team
+    }
+
+
+type Class
+    = Peasant
+
+
+
+-- | Soldier
+-- | Archer
+-- | Knight
+-- | Sapper
+-- | Squire
+-- | Dog
+-- | Catapult
+-- | Castle
+
+
+type Team
+    = Human
+    | AI
+
+
+toStringClass class =
+    case class of
         Peasant ->
             "Peasant"
 
 
-fromStringCharacter character =
-    case character of
+fromStringClass class =
+    case class of
         "Peasant" ->
             Ok Peasant
 
@@ -132,70 +183,52 @@ fromStringTeam team =
             Err "Unrecognised Team"
 
 
-encode : Int -> Model -> String
-encode level model =
+encodeHash : Hash -> E.Value
+encodeHash ( a, b, c ) =
+    E.list E.int [ a, b, c ]
+
+
+encodeCharacter character =
+    E.object
+        [ ( "class", toStringClass character.class |> E.string )
+        , ( "team", toStringTeam character.team |> E.string )
+        ]
+
+
+decodeHash : D.Decoder Hash
+decodeHash =
     let
-        encodeHash ( a, b, c ) =
-            E.list E.int [ a, b, c ]
+        triple list =
+            case list of
+                [ a, b, c ] ->
+                    if a + b + c == 0 then
+                        D.succeed ( a, b, c )
 
-        encodeCell cell =
-            E.object
-                [ ( "terrain", toStringTerrain cell.terrain |> E.string )
-                , ( "character", toStringCharacter cell.character |> E.string )
-                , ( "team", toStringTeam cell.team |> E.string )
-                ]
+                    else
+                        D.fail "The sum of this hash doesn't equal zero"
+
+                _ ->
+                    D.fail "Not a list with exactly 3 integers"
     in
-    E.encode 0 <|
-        E.object
-            [ ( "cells", E.dict (encodeHash >> E.encode 0) encodeCell model.cells )
-            , ( "selectedCell", EExtra.maybe encodeHash model.selectedCell )
-            , ( "height", E.int model.height )
-            , ( "width", E.int model.width )
-            ]
+    D.list D.int |> D.andThen triple
 
 
-decode : String -> Result D.Error Model
-decode =
-    let
-        decodeMap : D.Decoder Map
-        decodeMap =
-            D.map2 rectangularPointyTopMap
-                (D.field "height" D.int)
-                (D.field "width" D.int)
+decodeClass =
+    D.string |> D.andThen (DExtra.fromResult << fromStringClass)
 
-        decodeCell : D.Decoder Cell
-        decodeCell =
-            D.map3 Cell
-                (D.field "terrain" (D.string |> D.andThen (DExtra.fromResult << fromStringTerrain)))
-                (D.field "character" (D.string |> D.andThen (DExtra.fromResult << fromStringCharacter)))
-                (D.field "team" (D.string |> D.andThen (DExtra.fromResult << fromStringTeam)))
 
-        decodeHash : D.Decoder Hash
-        decodeHash =
-            let
-                triple : List Int -> D.Decoder ( Int, Int, Int )
-                triple list =
-                    case list of
-                        [ a, b, c ] ->
-                            if a + b + c == 0 then
-                                D.succeed ( a, b, c )
+decodeTeam =
+    D.string |> D.andThen (DExtra.fromResult << fromStringTeam)
 
-                            else
-                                D.fail "The sum of this hash doesn't equal zero"
 
-                        _ ->
-                            D.fail "Not a list with exactly 3 integers"
-            in
-            D.list D.int
-                |> D.andThen triple
+decodeCharacter =
+    D.map2 Character
+        (D.field "class" decodeClass)
+        (D.field "team" decodeTeam)
 
-        decodeModel : D.Decoder Model
-        decodeModel =
-            D.map5 Model
-                decodeMap
-                (D.field "cells" <| DExtra.dict2 decodeHash decodeCell)
-                (D.field "selectedCell" <| D.maybe decodeHash)
-                (D.field "height" D.int)
-                (D.field "width" D.int)
-    in
-    D.decodeString decodeModel
+
+decodeMap : D.Decoder Map
+decodeMap =
+    D.map2 rectangularPointyTopMap
+        (D.field "height" D.int)
+        (D.field "width" D.int)

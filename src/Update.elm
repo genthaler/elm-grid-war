@@ -3,7 +3,9 @@ module Update exposing (init, update)
 import Dict exposing (Dict)
 import Hexagons.Hex
 import Hexagons.Map exposing (Hash, Map, rectangularPointyTopMap)
-import Model exposing (Cell, Character(..), Model, Msg(..), Team(..), Terrain(..))
+import Json.Decode as D
+import Json.Encode as E
+import Model exposing (Cell, Character, Class(..), Model, Msg(..), Team(..), Terrain(..), decodeModel, encodeModel)
 
 
 init : Model
@@ -26,7 +28,7 @@ init =
                                 1 ->
                                     Rock
 
-                                2 -> 
+                                2 ->
                                     Mountain
 
                                 3 ->
@@ -34,8 +36,11 @@ init =
 
                                 _ ->
                                     Forest
-                        , character = Peasant
-                        , team = Human
+                        , character =
+                            Just
+                                { class = Peasant
+                                , team = Human
+                                }
                         }
                     )
     in
@@ -44,6 +49,8 @@ init =
     , selectedCell = Nothing
     , height = 10
     , width = 10
+    , export = ""
+    , verify = ""
     }
 
 
@@ -55,3 +62,17 @@ update msg model =
 
         Clicked cell ->
             { model | selectedCell = Just cell }
+
+        Export ->
+            { model | export = E.encode 2 <| encodeModel model }
+
+        Import ->
+            case D.decodeString decodeModel model.export of
+                Ok model2 ->
+                    model2
+
+                Err string ->
+                    { model | export = D.errorToString string }
+
+        ExportChanged string ->
+            { model | export = string }
