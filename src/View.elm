@@ -171,5 +171,4 @@ view model =
             , Attributes.rows 10
             ]
             [ text model.export ]
-        , div [] [ text model.verify ]
         ]

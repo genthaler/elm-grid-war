@@ -23,27 +23,31 @@ type alias Model =
     , height : Int
     , width : Int
     , export : String
-    , verify : String
     }
 
 
+decodeModel : D.Decoder Model
 decodeModel =
-    D.map7 Model
-        decodeMap
-        (D.field "cells" <| DExtra.dict2 decodeHash decodeCell)
-        (D.field "selectedCell" <| D.maybe decodeHash)
-        (D.field "height" D.int)
-        (D.field "width" D.int)
+    let
+        gather c s h w =
+        
+    in
+    D.map4 
+    D.map6 gather
+        (D.field "c" <| DExtra.dict2 decodeHash decodeCell)
+        (D.field "s" <| D.maybe decodeHash)
+        (D.field "h" D.int)
+        (D.field "w" D.int)
+        |> 
         (D.succeed "")
-        (D.succeed "adsf")
-
+        decodeMap
 
 encodeModel model =
     E.object
-        [ ( "cells", E.dict (encodeHash >> E.encode 0) encodeCell model.cells )
-        , ( "selectedCell", EExtra.maybe encodeHash model.selectedCell )
-        , ( "height", E.int model.height )
-        , ( "width", E.int model.width )
+        [ ( "c", E.list encodeCell <| Dict.values model.cells )
+        , ( "s", EExtra.maybe encodeHash model.selectedCell )
+        , ( "h", E.int model.height )
+        , ( "w", E.int model.width )
         ]
 
 
@@ -55,14 +59,14 @@ type alias Cell =
 
 decodeCell =
     D.map2 Cell
-        (D.field "terrain" decodeTerrain)
-        (D.field "character" <| D.maybe decodeCharacter)
+        (D.field "t" decodeTerrain)
+        (D.field "c" <| D.maybe decodeCharacter)
 
 
 encodeCell cell =
     E.object
-        [ ( "terrain", encodeTerrain cell.terrain )
-        , ( "character", EExtra.maybe encodeCharacter cell.character )
+        [ ( "t", encodeTerrain cell.terrain )
+        , ( "c", EExtra.maybe encodeCharacter cell.character )
         ]
 
 
@@ -77,36 +81,36 @@ type Terrain
 toStringTerrain terrain =
     case terrain of
         Grass ->
-            "Grass"
+            "G"
 
         Rock ->
-            "Rock"
+            "R"
 
         Mountain ->
-            "Mountain"
+            "M"
 
         Water ->
-            "Water"
+            "W"
 
         Forest ->
-            "Forest"
+            "F"
 
 
 fromStringTerrain string =
     case string of
-        "Grass" ->
+        "G" ->
             Ok Grass
 
-        "Rock" ->
+        "R" ->
             Ok Rock
 
-        "Mountain" ->
+        "M" ->
             Ok Mountain
 
-        "Water" ->
+        "W" ->
             Ok Water
 
-        "Forest" ->
+        "F" ->
             Ok Forest
 
         _ ->
@@ -129,14 +133,14 @@ type alias Character =
 
 decodeCharacter =
     D.map2 Character
-        (D.field "class" decodeClass)
-        (D.field "team" decodeTeam)
+        (D.field "c" decodeClass)
+        (D.field "t" decodeTeam)
 
 
 encodeCharacter character =
     E.object
-        [ ( "class", encodeClass character.class )
-        , ( "team", encodeTeam character.team )
+        [ ( "c", encodeClass character.class )
+        , ( "t", encodeTeam character.team )
         ]
 
 
@@ -158,12 +162,12 @@ type Class
 toStringClass class =
     case class of
         Peasant ->
-            "Peasant"
+            "P"
 
 
 fromStringClass class =
     case class of
-        "Peasant" ->
+        "P" ->
             Ok Peasant
 
         _ ->
@@ -171,7 +175,8 @@ fromStringClass class =
 
 
 decodeClass =
-    D.string |> D.andThen (DExtra.fromResult << fromStringClass)
+    D.string
+        |> D.andThen (DExtra.fromResult << fromStringClass)
 
 
 encodeClass =
@@ -186,18 +191,18 @@ type Team
 toStringTeam team =
     case team of
         Human ->
-            "Human"
+            "H"
 
         AI ->
-            "AI"
+            "A"
 
 
 fromStringTeam team =
     case team of
-        "Human" ->
+        "H" ->
             Ok Human
 
-        "AI" ->
+        "A" ->
             Ok AI
 
         _ ->
