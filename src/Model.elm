@@ -27,7 +27,6 @@ type alias Model =
     }
 
 
-decodeModel : D.Decoder Model
 decodeModel =
     D.map7 Model
         decodeMap
@@ -39,7 +38,6 @@ decodeModel =
         (D.succeed "adsf")
 
 
-encodeModel : Model -> E.Value
 encodeModel model =
     E.object
         [ ( "cells", E.dict (encodeHash >> E.encode 0) encodeCell model.cells )
@@ -55,17 +53,15 @@ type alias Cell =
     }
 
 
-decodeCell : D.Decoder Cell
 decodeCell =
     D.map2 Cell
         (D.field "terrain" decodeTerrain)
         (D.field "character" <| D.maybe decodeCharacter)
 
 
-encodeCell : Cell -> E.Value
 encodeCell cell =
     E.object
-        [ ( "terrain", toStringTerrain cell.terrain |> E.string )
+        [ ( "terrain", encodeTerrain cell.terrain )
         , ( "character", EExtra.maybe encodeCharacter cell.character )
         ]
 
@@ -121,10 +117,27 @@ decodeTerrain =
     D.string |> D.andThen (DExtra.fromResult << fromStringTerrain)
 
 
+encodeTerrain =
+    E.string << toStringTerrain
+
+
 type alias Character =
     { class : Class
     , team : Team
     }
+
+
+decodeCharacter =
+    D.map2 Character
+        (D.field "class" decodeClass)
+        (D.field "team" decodeTeam)
+
+
+encodeCharacter character =
+    E.object
+        [ ( "class", encodeClass character.class )
+        , ( "team", encodeTeam character.team )
+        ]
 
 
 type Class
@@ -142,11 +155,6 @@ type Class
 -- | Castle
 
 
-type Team
-    = Human
-    | AI
-
-
 toStringClass class =
     case class of
         Peasant ->
@@ -159,7 +167,20 @@ fromStringClass class =
             Ok Peasant
 
         _ ->
-            Err "Unrecognised Character"
+            Err "Unrecognised Class"
+
+
+decodeClass =
+    D.string |> D.andThen (DExtra.fromResult << fromStringClass)
+
+
+encodeClass =
+    E.string << toStringClass
+
+
+type Team
+    = Human
+    | AI
 
 
 toStringTeam team =
@@ -183,19 +204,14 @@ fromStringTeam team =
             Err "Unrecognised Team"
 
 
-encodeHash : Hash -> E.Value
-encodeHash ( a, b, c ) =
-    E.list E.int [ a, b, c ]
+decodeTeam =
+    D.string |> D.andThen (DExtra.fromResult << fromStringTeam)
 
 
-encodeCharacter character =
-    E.object
-        [ ( "class", toStringClass character.class |> E.string )
-        , ( "team", toStringTeam character.team |> E.string )
-        ]
+encodeTeam =
+    E.string << toStringTeam
 
 
-decodeHash : D.Decoder Hash
 decodeHash =
     let
         triple list =
@@ -213,21 +229,10 @@ decodeHash =
     D.list D.int |> D.andThen triple
 
 
-decodeClass =
-    D.string |> D.andThen (DExtra.fromResult << fromStringClass)
+encodeHash ( a, b, c ) =
+    E.list E.int [ a, b, c ]
 
 
-decodeTeam =
-    D.string |> D.andThen (DExtra.fromResult << fromStringTeam)
-
-
-decodeCharacter =
-    D.map2 Character
-        (D.field "class" decodeClass)
-        (D.field "team" decodeTeam)
-
-
-decodeMap : D.Decoder Map
 decodeMap =
     D.map2 rectangularPointyTopMap
         (D.field "height" D.int)
