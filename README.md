@@ -2,84 +2,67 @@
 
 My homage to the hex-based strategy games of yesteryear
 
-UniWar would be the game closest to what I'm looking at. Other games might be Myth, Warcraft, Glest.
-
-The Elm hexagon libraries deal mostly with measurement and mutation, nothing to do with display, so that's my lookout.
-
-I'm looking for a vector image look rather than an 8-bit look, so I'll go with SVG for the time being at least.
-
-Otherwise I might have to fall back to gifs.
-
-Feature list in no particular order:
-- update all elm stuff from npm, atom, vscode, sublime, lighttable
-- look for a good game template/bootstrap
-- look for a simple SVG example
-- serverless
-- Look for a platform for free games for gamestate, player registration and lookup
-- display a blank map
-- display a map with some terrain
-- display a map with some terrain and characters
-- a character moving to a different location
-- multiple characters moving
-- two characters fighting
-- make impossible states unrepresentable
-- game play page
-- give directions
-- automatic actions
-- text-based input of commands
-- pause game?
-- slow down game while typing?
-- rotate map
-- zoom into map
-- progressive enhancement of SVG images
-- move unit
-- game selection page
-- unit purchase/attribute page
-- scalable graphics
-- smooth animations
-- smooth gameplay
-- audio
-- multi-player, networking
+## Feature categories
+### Game setup
+  - display a map with some terrain and characters
+  - map/game editor
+  - save & load game
+    - plain text (JSON/Base64/Some other encoding)
+    - localstorage
+    - schema versioning
+    - history? CRDT?
+### Game play
+  - implement battle in text, use basic colours to show statuses
+    - need a console?
+  - move-based vs continuous play
+  - slow down game while typing?
+  - pause game?
+  - a character moving to a different location
+  - multiple characters moving
+  - two characters fighting
+  - keyboard controls
+  - show available moves
+  - show range of attack
+  - text-based input of commands
+  - move unit
+  - game selection page
+  - unit purchase/attribute page
+  - fog of war
+  - AI
+    - strategies
+    - automatic actions
+    - map generation - terraform
+    - path finding - A*
+### Game experience
+  - look for a simple SVG example
+  - rotate map
+  - zoom into map
+  - progressive enhancement of SVG images
+  - scalable graphics
+  - smooth animations
+  - smooth gameplay
+  - audio
+  - elm-geometry
+  - elm-3d-camera  
+### Help
+  - game play page
+  - give directions
+### Multiplayer
+  - Look for a platform for free games for gamestate, player registration and lookup
+  - serverless
   - peer to peer play
     - probably still need a server for discovery
   - server based?
-- native
+  - prove security properties
+  - vote to change game speed
+### Native
   - Electron?
   - React Native?
   - Flux?
+  - Flutter?
   - any new ones?
-- keyboard controls
-- show available moves
-- show range of attack
-- localstorage
-- prove security properties
-- schema versioning
-- navigation/routing
-- artificial intelligence
-- strategies
-- fog of war
-- landing page
-- map/game editor
-- Store game history? CRDT?
 
-So I'll need a way to display
-
-```
-Feature display a map
-
-Scenario display a map with one texture
-```
-
-Tasks
-- Represent different maps for easy loading.
-  - Probably easiest to use JSON & encoders & decoders. 
-  - Also want to be able to compress and Base64 it for use as a url param/anchor
-  - Will want the map editor earlier rather than later
-- Display basic hex grid
-- Display different perspective
-- Change perspective with keys
-- Random allocation of basic soldiers
-- Implement battle in text, use basic colours to show statuses
-- Fight over time
-- right-click for dialog to change orders
-  - UI definition
+## Tasks
+- bigger cells
+- write characters and teams
+- maybe use service worker to do game logic for AI?

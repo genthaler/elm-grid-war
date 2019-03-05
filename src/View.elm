@@ -4,34 +4,36 @@ import Dict
 import Hexagons.Hex exposing (Hex)
 import Hexagons.Layout exposing (Point, orientationLayoutPointy, polygonCorners)
 import Hexagons.Map exposing (Hash, Map)
-import Html exposing (Html)
+import Html exposing (Html, button, div, text, textarea)
 import Html.Attributes as Attributes
-import Model exposing (Cell, Character(..), Model, Msg(..), Team(..), Terrain(..))
+import Html.Events as HtmlEvents
+import Json.Decode as D
+import Model exposing (Cell, Character, Class(..), Model, Msg(..), Team(..), Terrain(..))
 import Svg exposing (Svg, g, polygon, svg)
 import Svg.Attributes exposing (fill, points, stroke, strokeWidth, style, version, viewBox, x, y)
-import Svg.Events exposing (onClick)
+import Svg.Events as SvgEvents
 import Svg.Lazy exposing (lazy, lazy2, lazy3)
 
 
 cellWidth =
-    20.0
+    40.0
 
 
 cellHeight =
-    20.0
+    40.0
 
 
 svgWidth =
-    500
+    1000
 
 
 svgHeight =
-    500
+    1000
 
 
 layout =
     { orientation = orientationLayoutPointy
-    , size = ( 20.0, 20.0 )
+    , size = ( 40.0, 40.0 )
     , origin = ( 0.0, 0.0 )
     }
 
@@ -124,7 +126,7 @@ hexGrid model =
                 , fill <|
                     cellColour hash
                 , points cornersCoords
-                , onClick <|
+                , SvgEvents.onClick <|
                     Clicked hash
                 ]
                 []
@@ -138,15 +140,35 @@ hexGrid model =
             (List.map (pointsToString << mapPolygonCorners << getCell) (Dict.toList model.map))
 
 
+inputDecoder : D.Decoder Msg
+inputDecoder =
+    D.map ExportChanged
+        (D.at [ "target", "value" ] D.string)
+
+
+
+-- (at [ "target", "scrollHeight" ] int)
+
+
 view : Model -> Html Msg
 view model =
-    svg
-        [ version "1.1"
-        , x "0"
-        , y "0"
-        , Svg.Attributes.height (String.fromInt svgHeight)
-        , Svg.Attributes.width (String.fromInt svgWidth)
-        , viewBox viewBoxStringCoords
-        ]
-        [ lazy hexGrid model
+    div []
+        [ svg
+            [ version "1.1"
+            , x "0"
+            , y "0"
+            , Svg.Attributes.height (String.fromInt svgHeight)
+            , Svg.Attributes.width (String.fromInt svgWidth)
+            , viewBox viewBoxStringCoords
+            ]
+            [ lazy hexGrid model
+            ]
+        , button [ HtmlEvents.onClick Export ] [ text "Export" ]
+        , button [ HtmlEvents.onClick Import ] [ text "Import" ]
+        , textarea
+            [ HtmlEvents.on "input" inputDecoder
+            , Attributes.cols 100
+            , Attributes.rows 10
+            ]
+            [ text model.export ]
         ]
