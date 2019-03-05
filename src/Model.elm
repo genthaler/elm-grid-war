@@ -30,17 +30,23 @@ decodeModel : D.Decoder Model
 decodeModel =
     let
         gather c s h w =
-        
+            let
+                map =
+                    rectangularPointyTopMap h w
+            in
+            Model map (Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c) s h w ""
     in
-    D.map4 
-    D.map6 gather
-        (D.field "c" <| DExtra.dict2 decodeHash decodeCell)
+    D.map4
+        gather
+        (D.field "c" <| D.list decodeCell)
         (D.field "s" <| D.maybe decodeHash)
         (D.field "h" D.int)
         (D.field "w" D.int)
-        |> 
-        (D.succeed "")
-        decodeMap
+
+
+
+-- D.string
+
 
 encodeModel model =
     E.object

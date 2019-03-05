@@ -32,6 +32,7 @@
             "folkertdev/elm-deque": "3.0.0",
             "folkertdev/elm-state": "3.0.1",
             "genthaler/elm-enum": "1.0.2",
+            "ianmackenzie/elm-3d-camera": "1.1.0",
             "ianmackenzie/elm-geometry": "1.2.1",
             "ianmackenzie/elm-geometry-svg": "1.0.2",
             "ivadzy/bbase64": "1.1.0",
@@ -51,7 +52,9 @@
             "elm/url": "1.0.0",
             "elm/virtual-dom": "1.0.2",
             "elm-community/intdict": "3.0.0",
+            "elm-explorations/linear-algebra": "1.0.3",
             "ianmackenzie/elm-float-extra": "1.0.1",
+            "ianmackenzie/elm-geometry-linear-algebra-interop": "1.0.2",
             "ianmackenzie/elm-interval": "1.0.1",
             "ianmackenzie/elm-triangular-mesh": "1.0.2",
             "rtfeldman/elm-iso8601-date-strings": "1.1.2"

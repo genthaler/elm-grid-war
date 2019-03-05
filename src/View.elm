@@ -16,24 +16,24 @@ import Svg.Lazy exposing (lazy, lazy2, lazy3)
 
 
 cellWidth =
-    20.0
+    40.0
 
 
 cellHeight =
-    20.0
+    40.0
 
 
 svgWidth =
-    500
+    1000
 
 
 svgHeight =
-    500
+    1000
 
 
 layout =
     { orientation = orientationLayoutPointy
-    , size = ( 20.0, 20.0 )
+    , size = ( 40.0, 40.0 )
     , origin = ( 0.0, 0.0 )
     }
 
