@@ -35,3 +35,7 @@ deploy:
   keep-history: true
   on:
     branch: master
+env:
+ global:
+ - GH_REF: github.com/genthaler/elm-grid-war.git
+ - secure: 
