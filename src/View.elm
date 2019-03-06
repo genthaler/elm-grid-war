@@ -4,7 +4,7 @@ import Dict
 import Hexagons.Hex exposing (Hex)
 import Hexagons.Layout exposing (Point, orientationLayoutPointy, polygonCorners)
 import Hexagons.Map exposing (Hash, Map)
-import Html exposing (Html, button, div, text, textarea)
+import Html exposing (Html, button, div, text, textarea, br)
 import Html.Attributes as Attributes
 import Html.Events as HtmlEvents
 import Json.Decode as D
@@ -16,24 +16,24 @@ import Svg.Lazy exposing (lazy, lazy2, lazy3)
 
 
 cellWidth =
-    40.0
+    20.0
 
 
 cellHeight =
-    40.0
+    20.0
 
 
 svgWidth =
-    1000
+    500
 
 
 svgHeight =
-    1000
+    500
 
 
 layout =
     { orientation = orientationLayoutPointy
-    , size = ( 40.0, 40.0 )
+    , size = ( cellWidth,cellHeight )
     , origin = ( 0.0, 0.0 )
     }
 
@@ -163,8 +163,10 @@ view model =
             ]
             [ lazy hexGrid model
             ]
+        , br [] [] 
         , button [ HtmlEvents.onClick Export ] [ text "Export" ]
         , button [ HtmlEvents.onClick Import ] [ text "Import" ]
+        , br [] [] 
         , textarea
             [ HtmlEvents.on "input" inputDecoder
             , Attributes.cols 100

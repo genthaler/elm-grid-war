@@ -12,7 +12,8 @@ My homage to the hex-based strategy games of yesteryear
     - schema versioning
     - history? CRDT?
 ### Game play
-  - implement battle in text, use basic colours to show statuses
+  - implement battle in text
+    - use basic colours to show statuses
     - need a console?
   - move-based vs continuous play
   - slow down game while typing?

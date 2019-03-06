@@ -10,7 +10,7 @@
   "scripts": {
     "test": "elm-test",
     "start": "parcel index.html",
-    "predeploy": "parcel build index.html",
+    "predeploy": "parcel build --public-url=. index.html",
     "deploy": "gh-pages -d dist"
   },
   "repository": {
@@ -43,6 +43,7 @@
     "elm-hot": "^1.0.1",
     "elm-outdated": "^1.1.0",
     "elm-test": "^0.19.0-rev5",
+    "elm-xref": "^4.0.0",
     "elmx": "^2.0.1",
     "gh-pages": "^2.0.1",
     "gh-pages-travis": "^1.0.4",
