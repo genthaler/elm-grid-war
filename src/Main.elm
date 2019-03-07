@@ -15,6 +15,7 @@ import Json.Decode.Extra as DExtra
 import Json.Encode as E
 import Json.Encode.Extra as EExtra
 import Result.Extra as RExtra
+import RollingList
 import Svg exposing (Svg, g, polygon, svg)
 import Svg.Attributes exposing (fill, points, stroke, strokeWidth, style, version, viewBox, x, y)
 import Svg.Events as SvgEvents
@@ -47,6 +48,7 @@ type alias Model =
     , selectedCell : Maybe Hash
     , export : String
     , gameState : GameState
+    , teams : RollingList.RollingList Team
     }
 
 
@@ -58,7 +60,7 @@ decodeModel =
                 map =
                     rectangularPointyTopMap h w
             in
-            Model map h w (Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c) s "" Init
+            Model map h w (Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c) s "" Init (RollingList.fromList [])
     in
     D.map4
         gather
@@ -216,10 +218,10 @@ type Team
 
 toStringTeam team =
     case team of
-        Human ->
+        Human  ->
             "H"
 
-        AI ->
+        AI  ->
             "A"
 
 
@@ -313,6 +315,8 @@ init =
     , width = 10
     , export = ""
     , gameState = Init
+    , teams = RollingList.fromList [AI, Human]
+
     }
 
 

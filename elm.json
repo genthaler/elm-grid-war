@@ -37,6 +37,7 @@
             "ianmackenzie/elm-geometry-svg": "1.0.2",
             "ivadzy/bbase64": "1.1.0",
             "joneshf/elm-tagged": "2.1.1",
+            "lovasoa/elm-rolling-list": "1.1.4",
             "lukewestby/elm-template": "3.0.0",
             "mdgriffith/elm-ui": "1.1.0",
             "stoeffel/elm-verify": "5.0.0",

@@ -76,10 +76,13 @@ Probably the most fun for me is the game logic, and it's the most reusable, so s
 - need a GO button & action
 - want a stream of events, so need some sort of data structure for that
 - do I want a state machine?
+- we want the game to progress at an orderly pace.
+    - so we'll subscribe to a timer event for ticks to start new events
 
 So the states are:
-- Game init
+- Init
   - random allocation of units
+- Wait for 
 - Attack team
   - Circular list of teams
 - Win
