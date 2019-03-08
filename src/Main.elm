@@ -14,16 +14,27 @@ import Json.Decode as D
 import Json.Decode.Extra as DExtra
 import Json.Encode as E
 import Json.Encode.Extra as EExtra
+import List.Extra as LExtra
+import Maybe.Extra as MExtra
+import Platform
+import Platform.Sub
+import Random
+import Random.List
 import Result.Extra as RExtra
 import RollingList
+import Set
 import Svg exposing (Svg, g, polygon, svg)
 import Svg.Attributes exposing (fill, points, stroke, strokeWidth, style, version, viewBox, x, y)
 import Svg.Events as SvgEvents
 import Svg.Lazy exposing (lazy, lazy2, lazy3)
+import Time
 
 
 type Msg
     = NoOp
+    | ShuffledList (List ( Hash, Cell ))
+    | RandomCell Int
+    | Tick Time.Posix
     | Clicked Hash
     | Export
     | Import
@@ -32,7 +43,8 @@ type Msg
 
 type GameState
     = Init
-    | Attack Team (List Hash)
+    | Go
+    | Attack Team
     | End
 
 
@@ -60,7 +72,7 @@ decodeModel =
                 map =
                     rectangularPointyTopMap h w
             in
-            Model map h w (Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c) s "" Init (RollingList.fromList [])
+            Model map h w (Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c) s "" Init (cellsToTeams c)
     in
     D.map4
         gather
@@ -218,10 +230,10 @@ type Team
 
 toStringTeam team =
     case team of
-        Human  ->
+        Human ->
             "H"
 
-        AI  ->
+        AI ->
             "A"
 
 
@@ -272,12 +284,26 @@ decodeMap =
         (D.field "width" D.int)
 
 
-init : Model
-init =
+cellsToTeams : List Cell -> RollingList.RollingList Team
+cellsToTeams cells =
+    cells |> List.map .character |> MExtra.values |> List.map .team |> RollingList.fromList
+
+
+init : flags -> ( Model, Cmd Msg )
+init flags =
     let
+        height =
+            10
+
+        width =
+            10
+
+        teamSize =
+            10
+
         initialMap : Dict Hash Hexagons.Hex.Hex
         initialMap =
-            rectangularPointyTopMap 10 10
+            rectangularPointyTopMap height width
 
         initialCells : Dict Hash Cell
         initialCells =
@@ -308,42 +334,54 @@ init =
                         }
                     )
     in
-    { map = initialMap
-    , cells = initialCells
-    , selectedCell = Nothing
-    , height = 10
-    , width = 10
-    , export = ""
-    , gameState = Init
-    , teams = RollingList.fromList [AI, Human]
+    ( { map = initialMap
+      , cells = initialCells
+      , selectedCell = Nothing
+      , height = height
+      , width = width
+      , export = ""
+      , gameState = Init
+      , teams = initialCells |> Dict.values |> cellsToTeams
+      }
+    , Random.generate ShuffledList (initialCells |> Dict.toList |> Random.List.shuffle)
+    )
 
-    }
 
-
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         NoOp ->
-            model
+            ( model, Cmd.none )
+
+        Tick posix ->
+            ( model, Random.generate RandomCell (Random.int 1 6) )
+
+        ShuffledList list ->
+            ( { model | cells = Dict.fromList list }, Cmd.none )
+
+        RandomCell seed ->
+            ( model, Cmd.none )
 
         Clicked cell ->
-            { model | selectedCell = Just cell }
+            ( { model | selectedCell = Just cell }
+            , Cmd.none
+            )
 
         Export ->
             -- { model | export = encodeModel model |> E.encode 0 |> E64.string |> E64.encode }
-            { model | export = encodeModel model |> E.encode 2 }
+            ( { model | export = encodeModel model |> E.encode 2 }, Cmd.none )
 
         Import ->
             -- case model.export |> D64.decode D64.string |> Result.mapError base64ErrorToString |> Result.andThen (D.decodeString decodeModel >> Result.mapError D.errorToString) of
             case model.export |> D.decodeString decodeModel |> Result.mapError D.errorToString of
                 Ok model2 ->
-                    { model2 | export = model.export }
+                    ( { model2 | export = model.export }, Cmd.none )
 
                 Err string ->
-                    { model | export = string }
+                    ( { model | export = string }, Cmd.none )
 
         ExportChanged string ->
-            { model | export = string }
+            ( { model | export = string }, Cmd.none )
 
 
 base64ErrorToString : D64.Error -> String
@@ -491,36 +529,54 @@ inputDecoder =
 -- (at [ "target", "scrollHeight" ] int)
 
 
-view : Model -> Html Msg
+view : Model -> Browser.Document Msg
 view model =
-    div []
-        [ svg
-            [ version "1.1"
-            , x "0"
-            , y "0"
-            , Svg.Attributes.height (String.fromInt svgHeight)
-            , Svg.Attributes.width (String.fromInt svgWidth)
-            , viewBox viewBoxStringCoords
+    { title = "Elm Grid War"
+    , body =
+        [ div []
+            [ svg
+                [ version "1.1"
+                , x "0"
+                , y "0"
+                , Svg.Attributes.height (String.fromInt svgHeight)
+                , Svg.Attributes.width (String.fromInt svgWidth)
+                , viewBox viewBoxStringCoords
+                ]
+                [ lazy hexGrid model
+                ]
+            , br [] []
+            , button [ HtmlEvents.onClick Export ] [ text "Export" ]
+            , button [ HtmlEvents.onClick Import ] [ text "Import" ]
+            , br [] []
+            , textarea
+                [ HtmlEvents.on "input" inputDecoder
+                , Attributes.cols 100
+                , Attributes.rows 10
+                ]
+                [ text model.export ]
             ]
-            [ lazy hexGrid model
-            ]
-        , br [] []
-        , button [ HtmlEvents.onClick Export ] [ text "Export" ]
-        , button [ HtmlEvents.onClick Import ] [ text "Import" ]
-        , br [] []
-        , textarea
-            [ HtmlEvents.on "input" inputDecoder
-            , Attributes.cols 100
-            , Attributes.rows 10
-            ]
-            [ text model.export ]
         ]
+    }
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    case model.gameState of
+        Init ->
+            Time.every 1000 Tick
+
+        Attack AI ->
+            Time.every 1000 Tick
+
+        _ ->
+            Sub.none
 
 
 main : Program () Model Msg
 main =
-    Browser.sandbox
+    Browser.document
         { init = init
+        , subscriptions = subscriptions
         , view = view
         , update = update
         }
