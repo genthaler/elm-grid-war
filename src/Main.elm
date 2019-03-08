@@ -339,7 +339,7 @@ init flags =
       , gameState = Init
       , teams = initialCells |> Dict.values |> cellsToTeams
       }
-    , Random.generate ShuffledCellList (initialCells |> Dict.values |> Random.List.shuffle)
+    , Random.generate ShuffledCellList (initialCells |> Dict.toList |> Random.List.shuffle)
     )
 
 
