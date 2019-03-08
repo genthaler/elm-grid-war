@@ -32,7 +32,7 @@ import Time
 
 type Msg
     = NoOp
-    | ShuffledList (List ( Hash, Cell ))
+    | ShuffledCellList (List ( Hash, Cell ))
     | RandomCell Int
     | Tick Time.Posix
     | Clicked Hash
@@ -310,27 +310,23 @@ init flags =
             initialMap
                 |> Dict.map
                     (\( x, y, z ) v ->
-                        { terrain =
-                            case Basics.modBy 5 x of
+                        { terrain = Grass
+                        , character =
+                            case modBy 5 x of
                                 0 ->
-                                    Grass
+                                    Just
+                                        { class = Peasant
+                                        , team = Human
+                                        }
 
                                 1 ->
-                                    Rock
-
-                                2 ->
-                                    Mountain
-
-                                3 ->
-                                    Water
+                                    Just
+                                        { class = Peasant
+                                        , team = AI
+                                        }
 
                                 _ ->
-                                    Forest
-                        , character =
-                            Just
-                                { class = Peasant
-                                , team = Human
-                                }
+                                    Nothing
                         }
                     )
     in
@@ -343,7 +339,7 @@ init flags =
       , gameState = Init
       , teams = initialCells |> Dict.values |> cellsToTeams
       }
-    , Random.generate ShuffledList (initialCells |> Dict.toList |> Random.List.shuffle)
+    , Random.generate ShuffledCellList (initialCells |> Dict.values |> Random.List.shuffle)
     )
 
 
@@ -354,10 +350,11 @@ update msg model =
             ( model, Cmd.none )
 
         Tick posix ->
-            ( model, Random.generate RandomCell (Random.int 1 6) )
+            -- ( model, Random.generate RandomCell (Random.int 1 6) )
+            ( model, Cmd.none )
 
-        ShuffledList list ->
-            ( { model | cells = Dict.fromList list }, Cmd.none )
+        ShuffledCellList list ->
+            ( { model | cells = list |> List.reverse |> Dict.fromList }, Cmd.none )
 
         RandomCell seed ->
             ( model, Cmd.none )
@@ -466,25 +463,19 @@ hexGrid model =
             model.selectedCell |> Maybe.map ((==) hash) |> Maybe.withDefault False
 
         normalCellColour hash =
-            case
-                Dict.get hash model.cells
-                    |> Maybe.map .terrain
-                    |> Maybe.withDefault Grass
-            of
-                Grass ->
-                    "#179f83"
+            Dict.get hash model.cells
+                |> Maybe.andThen .character
+                |> Maybe.map .team
+                |> Maybe.map
+                    (\team ->
+                        case team of
+                            Human ->
+                                "red"
 
-                Rock ->
-                    "#777777"
-
-                Mountain ->
-                    "#333333"
-
-                Water ->
-                    "#0000ff"
-
-                Forest ->
-                    "#11ff11"
+                            AI ->
+                                "blue"
+                    )
+                |> Maybe.withDefault "lightgrey"
 
         selectedCellColour =
             "#777777"
