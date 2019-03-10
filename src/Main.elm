@@ -4,7 +4,7 @@ import Base64.Decode as D64
 import Base64.Encode as E64
 import Browser
 import Dict exposing (Dict)
-import Hexagons.Hex exposing (Hex)
+import Hexagons.Hex exposing (Direction(..), Hex)
 import Hexagons.Layout exposing (Point, orientationLayoutPointy, polygonCorners)
 import Hexagons.Map exposing (Hash, Map, rectangularPointyTopMap)
 import Html exposing (Html, br, button, div, text, textarea)
@@ -62,6 +62,10 @@ type alias Model =
     , gameState : GameState
     , teams : RollingList.RollingList Team
     }
+
+
+diretions =
+    [ NE, E, SE, SW, W, NW ]
 
 
 decodeModel : D.Decoder Model
@@ -354,7 +358,16 @@ update msg model =
             ( model, Cmd.none )
 
         ShuffledCellList list ->
-            ( { model | cells = list |> List.reverse |> Dict.fromList }, Cmd.none )
+            ( { model
+                | cells =
+                    List.map2
+                        (\( k, _ ) ( _, v ) -> ( k, v ))
+                        (Dict.toList model.cells)
+                        list
+                        |> Dict.fromList
+              }
+            , Cmd.none
+            )
 
         RandomCell seed ->
             ( model, Cmd.none )
