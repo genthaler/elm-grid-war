@@ -23,6 +23,7 @@ import Random.List
 import Result.Extra as RExtra
 import RollingList
 import Set
+import StateMachine as SM exposing (Allowed, State(..), map)
 import Svg exposing (Svg, g, polygon, svg)
 import Svg.Attributes exposing (fill, points, stroke, strokeWidth, style, version, viewBox, x, y)
 import Svg.Events as SvgEvents
@@ -41,25 +42,91 @@ type Msg
     | ExportChanged String
 
 
-type GameState
-    = Init
-    | Go
-    | Attack Team
-    | End
 
+{-
+   Construct initial UI, new game/saved game/restart game (saved seed)
+   If new game,
+   - Get new seed
+   - shuffle new map,
+   - animate constructing map
+   If restart game
+   - enter seed (prefill with seed if available)
+   - go
+   - shuffle map with seed
+   - animate
+   If saved game,
+   - Get saved map JSON
+   - Go
+   - Parse JSON into map
+
+   - Display map
+
+   - Start game
+   - For each Team
+       - if AI
+           - for each Character in Team
+               - find all valid directions to move
+               - get random direction
+               - if someone there
+                   - fight them
+               - else
+                   go there
+        - if Human
+            later...
+-}
+
+
+type Model
+    = Init (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } {})
+    | GettingTimeForNewSeed (State { gettingWaitForStart : Allowed } {})
+    | GettingSeed (State { gettingWaitForStart : Allowed } {})
+    | GettingMapJson (State { gettingWaitForStart : Allowed } {})
+    | WaitForStart (State { attacking : Allowed } { battleField : Battlefield })
+    | Attacking (State { attacking : Allowed } { battleField : Battlefield, team : Team })
+    | Ending (State { ending : Allowed } { team : Team })
+
+
+toInit : Model
+toInit =
+    Init <| State {} SM.
+
+
+toGettingTimeForNewSeed : State { a | waitForStart : Allowed } {  } -> Model
+toGettingTimeForNewSeed (State state) =
+    GettingTimeForNewSeed <| State state
+
+toGettingSeed : State { a | waitForStart : Allowed } {  } -> Model
+toGettingSeed (State state) =
+    GettingSeed <| State state
+
+toGettingMapJson : State { a | waitForStart : Allowed } {  } -> Model
+toGettingMapJson (State state) =
+    GettingMapJson <| State state
+
+toWaitForStart : State { a | attacking : Allowed } {  }-> Battlefield -> Model
+toWaitForStart (State state) battlefield=
+    WaitForStart <| State {state|battlefield = Battlefield}
+
+toAttacking : State { a | attacking : Allowed } {  } -> Team -> Model
+toAttacking (State state ) team=
+    Attacking <| State {state|team = team}
+
+
+toEnding : State { a | ending : Allowed } { b|team :Team } -> Model
+toEnding (State state)=
+    Ending <| State team
 
 type alias MoveState =
     { hash : Hash, movesLeft : Int }
 
 
-type alias Model =
+type alias Battlefield =
     { map : Map
     , height : Int
     , width : Int
     , cells : Dict Hash Cell
     , selectedCell : Maybe Hash
     , export : String
-    , gameState : GameState
     , teams : RollingList.RollingList Team
     }
 
@@ -349,11 +416,11 @@ init flags =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
-        NoOp ->
+    case (msg, model) of
+        (NoOp,_) ->
             ( model, Cmd.none )
 
-        Tick posix ->
+        (Tick posix, GettingTimeForNewSeed (State state) -> 
             -- ( model, Random.generate RandomCell (Random.int 1 6) )
             ( model, Cmd.none )
 
