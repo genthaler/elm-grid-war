@@ -39,6 +39,7 @@
     "elm-docs": "^0.4.0",
     "elm-docstyle": "^1.0.0",
     "elm-doctest": "^0.4.1",
+    "elm-format": "^0.8.1",
     "elm-format-short": "^0.10.3",
     "elm-hot": "^1.0.1",
     "elm-outdated": "^1.1.0",

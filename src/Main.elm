@@ -64,7 +64,7 @@ type alias Model =
     }
 
 
-diretions =
+directions =
     [ NE, E, SE, SW, W, NW ]
 
 
