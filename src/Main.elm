@@ -2,7 +2,9 @@ module Main exposing (main)
 
 import Base64.Decode as D64
 import Base64.Encode as E64
+import Basics.Extra
 import Browser
+import Debug
 import Dict exposing (Dict)
 import Hexagons.Hex exposing (Direction(..), Hex)
 import Hexagons.Layout exposing (Point, orientationLayoutPointy, polygonCorners)
@@ -89,6 +91,7 @@ type Model
     | WaitForStart (State { attacking : Allowed } { battlefield : Battlefield })
     | Attacking (State { ending : Allowed } { battlefield : Battlefield, team : Team })
     | Ending (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { team : Team })
+    | Error (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { message : String })
 
 
 toInit : Model
@@ -126,6 +129,11 @@ toEnding (State { team }) =
     Ending <| State { team = team }
 
 
+toError : String -> Model
+toError message =
+    Error <| State { message = message }
+
+
 type alias MoveState =
     { hash : Hash, movesLeft : Int }
 
@@ -138,6 +146,8 @@ type alias Battlefield =
     , selectedCell : Maybe Hash
     , export : String
     , teams : RollingList.RollingList Team
+    , seed : Random.Seed
+    , initialSeedSeed : Int
     }
 
 
@@ -153,7 +163,7 @@ decodeBattlefield =
                 map =
                     rectangularPointyTopMap h w
             in
-            Battlefield map h w (Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c) s "" (cellsToTeams c)
+            Battlefield map h w (Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c) s "" (cellsToTeams c) (Random.initialSeed 1) 1
     in
     D.map4
         gather
@@ -370,9 +380,12 @@ cellsToTeams cells =
     cells |> List.map .character |> MExtra.values |> List.map .team |> RollingList.fromList
 
 
-initBattlefield : Random.Seed -> Battlefield
-initBattlefield seed =
+initBattlefield : Int -> Battlefield
+initBattlefield seedSeed =
     let
+        seed =
+            Random.initialSeed seedSeed
+
         height =
             10
 
@@ -386,8 +399,7 @@ initBattlefield seed =
         initialMap =
             rectangularPointyTopMap height width
 
-        initialCells : Dict Hash Cell
-        initialCells =
+        ( shuffledCells, newSeed ) =
             initialMap
                 |> Dict.map
                     (\( x, y, z ) v ->
@@ -410,14 +422,20 @@ initBattlefield seed =
                                     Nothing
                         }
                     )
+                |> Dict.toList
+                |> Random.List.shuffle
+                |> Basics.Extra.flip Random.step seed
+                |> Tuple.mapFirst (mergeShuffledCells initialMap)
     in
     { map = initialMap
-    , cells = initialCells
-    , selectedCell = Nothing
     , height = height
     , width = width
+    , cells = shuffledCells
+    , selectedCell = Nothing
     , export = ""
-    , teams = initialCells |> Dict.values |> cellsToTeams
+    , teams = shuffledCells |> Dict.values |> cellsToTeams
+    , seed = newSeed
+    , initialSeedSeed = seedSeed
     }
 
 
@@ -434,10 +452,6 @@ init _ =
     ( toInit, Cmd.none )
 
 
-
--- , Random.generate ShuffledCellList (initialCells |> Dict.toList |> Random.List.shuffle)
-
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( msg, model ) of
@@ -451,17 +465,18 @@ update msg model =
             ( model, Cmd.none )
 
         ( Tick posix, GettingTimeForNewSeed state ) ->
-            ( toWaitForStart state <| initBattlefield <| Random.initialSeed <| Time.posixToMillis posix, Cmd.none )
+            ( toWaitForStart state <| initBattlefield <| Time.posixToMillis posix, Cmd.none )
 
         ( GetSeed seedSeed, GettingSeed state ) ->
             ( toGettingSeed state seedSeed, Cmd.none )
 
         ( UseSeed, GettingSeed state ) ->
-            ( model, Cmd.none )
-            -- ( toWaitForStart state <| initBattlefield <| Random.initialSeed <| Time.posixToMillis posix, Cmd.none )
+            case state |> SM.untag |> .seedSeed of
+                Just seedSeed ->
+                    ( toWaitForStart state <| initBattlefield <| seedSeed, Cmd.none )
 
-        ( NoOp, GettingSeed state ) ->
-            ( model, Cmd.none )
+                Nothing ->
+                    ( model, Cmd.none )
 
         ( NoOp, GettingMapJson state ) ->
             ( model, Cmd.none )
@@ -495,7 +510,7 @@ update msg model =
         -- ExportChanged string ->
         --     ( { model | export = string }, Cmd.none )
         _ ->
-            ( model, Cmd.none )
+            ( toError "Unexpected message/state combination", Cmd.none )
 
 
 base64ErrorToString : D64.Error -> String
@@ -695,10 +710,14 @@ view model =
                         ]
                     ]
 
-                -- Attacking (State { ending : Allowed } { battlefield : Battlefield, team : Team })
-                -- Ending (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { team : Team })
-                _ ->
+                Attacking (State { battlefield, team }) ->
                     []
+
+                Ending (State { team }) ->
+                    []
+
+                Error (State { message }) ->
+                    [ text message ]
     in
     { title = "Elm Grid War"
     , body = body
