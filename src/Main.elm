@@ -11,7 +11,7 @@ import Hexagons.Layout exposing (Point, orientationLayoutPointy, polygonCorners)
 import Hexagons.Map exposing (Hash, Map, rectangularPointyTopMap)
 import Html exposing (Html, br, button, div, text, textarea)
 import Html.Attributes as Attributes
-import Html.Events as HtmlEvents
+import Html.Events as Events
 import Json.Decode as D
 import Json.Decode.Extra as DExtra
 import Json.Encode as E
@@ -26,7 +26,7 @@ import Random.List
 import Result.Extra as RExtra
 import RollingList
 import Set
-import StateMachine as SM exposing (Allowed, State(..), map)
+import StateMachine as SM exposing (Allowed, State(..), untag)
 import Svg exposing (Svg, g, polygon, svg)
 import Svg.Attributes exposing (fill, points, stroke, strokeWidth, style, version, viewBox, x, y)
 import Svg.Events as SvgEvents
@@ -87,9 +87,9 @@ type Model
     = Init (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } {})
     | GettingTimeForNewSeed (State { waitingForStart : Allowed } {})
     | GettingSeed (State { gettingSeed : Allowed, waitingForStart : Allowed } { seedSeed : Maybe Int })
-    | GettingMapJson (State { waitingForStart : Allowed } {})
-    | WaitForStart (State { attacking : Allowed } { battlefield : Battlefield })
-    | Attacking (State { ending : Allowed } { battlefield : Battlefield, team : Team })
+    | GettingMapJson (State { waitingForStart : Allowed } { export : String })
+    | WaitForStart (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, attacking : Allowed } { battlefield : Battlefield })
+    | Attacking (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, ending : Allowed } { battlefield : Battlefield, team : Team })
     | Ending (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { team : Team })
     | Error (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { message : String })
 
@@ -99,9 +99,9 @@ toInit =
     Init <| State {}
 
 
-toGettingTimeForNewSeed : State { a | gettingTimeForNewSeed : Allowed } {} -> Model
+toGettingTimeForNewSeed : State { a | gettingTimeForNewSeed : Allowed } b -> Model
 toGettingTimeForNewSeed (State state) =
-    GettingTimeForNewSeed <| State state
+    GettingTimeForNewSeed <| State {}
 
 
 toGettingSeed : State { a | gettingSeed : Allowed } b -> Maybe Int -> Model
@@ -109,9 +109,9 @@ toGettingSeed (State _) seedSeed =
     GettingSeed <| State { seedSeed = seedSeed }
 
 
-toGettingMapJson : State { a | gettingMapJson : Allowed } {} -> Model
-toGettingMapJson (State state) =
-    GettingMapJson <| State state
+toGettingMapJson : State { a | gettingMapJson : Allowed } b -> String -> Model
+toGettingMapJson (State state) export =
+    GettingMapJson <| State { export = export }
 
 
 toWaitForStart : State { a | waitingForStart : Allowed } b -> Battlefield -> Model
@@ -458,7 +458,13 @@ update msg model =
         ( NewGame, Init state ) ->
             ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
 
+        ( NewGame, WaitForStart state ) ->
+            ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
+
         ( RestartGame, Init state ) ->
+            ( toGettingSeed state Nothing, Cmd.none )
+
+        ( RestartGame, WaitForStart state ) ->
             ( toGettingSeed state Nothing, Cmd.none )
 
         ( ImportGame, Init state ) ->
@@ -658,29 +664,29 @@ view model =
         body =
             case model of
                 Init _ ->
-                    [ button [ HtmlEvents.onClick NewGame ] [ text "New Game" ]
-                    , button [ HtmlEvents.onClick RestartGame ] [ text "Restart Game" ]
-                    , button [ HtmlEvents.onClick ImportGame ] [ text "Import Game" ]
+                    [ button [ Events.onClick NewGame ] [ text "New Game" ]
+                    , button [ Events.onClick RestartGame ] [ text "Restart Game" ]
+                    , button [ Events.onClick ImportGame ] [ text "Import Game" ]
                     ]
 
                 GettingTimeForNewSeed _ ->
                     []
 
-                GettingSeed _ ->
-                    [ Html.input [ HtmlEvents.onInput (String.toInt >> GetSeed) ]
+                GettingSeed state ->
+                    [ Html.input [ Events.onInput (String.toInt >> GetSeed), state |> untag |> .seedSeed |> Maybe.map String.fromInt |> Maybe.withDefault "" |> Attributes.value ]
                         []
-                    , button [ HtmlEvents.onClick UseSeed ] [ text "Use Seed" ]
+                    , button [ Events.onClick UseSeed ] [ text "Use Seed" ]
                     ]
 
-                GettingMapJson _ ->
-                    [ button [ HtmlEvents.onClick Import ] [ text "Import" ]
+                GettingMapJson state ->
+                    [ button [ Events.onClick Import ] [ text "Import" ]
                     , br [] []
                     , textarea
-                        [ HtmlEvents.on "input" inputDecoder
+                        [ Events.on "input" inputDecoder
                         , Attributes.cols 100
                         , Attributes.rows 10
                         ]
-                        [ text "" ]
+                        [ text (state |> untag |> .export) ]
                     ]
 
                 WaitForStart (State { battlefield }) ->
@@ -696,15 +702,10 @@ view model =
                             [ lazy hexGrid battlefield
                             ]
                         , br [] []
-                        , button [ HtmlEvents.onClick Export ] [ text "Export" ]
-                        , button [ HtmlEvents.onClick Import ] [ text "Import" ]
-                        , br [] []
-                        , textarea
-                            [ HtmlEvents.on "input" inputDecoder
-                            , Attributes.cols 100
-                            , Attributes.rows 10
-                            ]
-                            [ text "" ]
+                        , button [ Events.onClick NewGame ] [ text "New Game" ]
+                        , button [ Events.onClick RestartGame ] [ text "Restart Game" ]
+                        , button [ Events.onClick ImportGame ] [ text "Import Game" ]
+                        , button [ Events.onClick Export ] [ text "Export" ]
 
                         --model.export
                         ]
