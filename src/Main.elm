@@ -9,7 +9,7 @@ import Dict exposing (Dict)
 import Hexagons.Hex exposing (Direction(..), Hex)
 import Hexagons.Layout exposing (Point, orientationLayoutPointy, polygonCorners)
 import Hexagons.Map exposing (Hash, Map, rectangularPointyTopMap)
-import Html exposing (Html, br, button, div, text, textarea)
+import Html exposing (Html, br, button, div, h1, text, textarea)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Json.Decode as D
@@ -658,18 +658,38 @@ inputDecoder =
 -- (at [ "target", "scrollHeight" ] int)
 
 
+viewNewGameButton : State { a | gettingTimeForNewSeed : Allowed } b -> Html Msg
+viewNewGameButton _ =
+    button [ Events.onClick NewGame ] [ text "New Game" ]
+
+
+viewRestartGameButton : State { a | gettingSeed : Allowed } b -> Html Msg
+viewRestartGameButton _ =
+    button [ Events.onClick RestartGame ] [ text "Restart Game" ]
+
+
+viewImportGameButton : State { a | gettingMapJson : Allowed } b -> Html Msg
+viewImportGameButton _ =
+    button [ Events.onClick RestartGame ] [ text "Restart Game" ]
+
+
+viewExportGameButton : State { a | gettingMapJson : Allowed } b -> Html Msg
+viewExportGameButton state =
+    button [ Events.onClick Export ] [ text "Export" ]
+
+
 view : Model -> Browser.Document Msg
 view model =
     let
         body =
             case model of
-                Init _ ->
-                    [ button [ Events.onClick NewGame ] [ text "New Game" ]
-                    , button [ Events.onClick RestartGame ] [ text "Restart Game" ]
-                    , button [ Events.onClick ImportGame ] [ text "Import Game" ]
+                Init state ->
+                    [ viewNewGameButton state
+                    , viewRestartGameButton state
+                    , viewImportGameButton state
                     ]
 
-                GettingTimeForNewSeed _ ->
+                GettingTimeForNewSeed state ->
                     []
 
                 GettingSeed state ->
@@ -689,7 +709,7 @@ view model =
                         [ text (state |> untag |> .export) ]
                     ]
 
-                WaitForStart (State { battlefield }) ->
+                WaitForStart state ->
                     [ div []
                         [ svg
                             [ version "1.1"
@@ -699,26 +719,42 @@ view model =
                             , Svg.Attributes.width (String.fromInt svgWidth)
                             , viewBox viewBoxStringCoords
                             ]
-                            [ lazy hexGrid battlefield
+                            [ state |> untag |> .battlefield |> lazy hexGrid
                             ]
                         , br [] []
-                        , button [ Events.onClick NewGame ] [ text "New Game" ]
-                        , button [ Events.onClick RestartGame ] [ text "Restart Game" ]
-                        , button [ Events.onClick ImportGame ] [ text "Import Game" ]
-                        , button [ Events.onClick Export ] [ text "Export" ]
-
-                        --model.export
+                        , viewNewGameButton state
+                        , viewRestartGameButton state
+                        , viewImportGameButton state
+                        , viewExportGameButton state
                         ]
                     ]
 
-                Attacking (State { battlefield, team }) ->
-                    []
+                Attacking state ->
+                    [ br [] []
+                    , viewNewGameButton state
+                    , viewRestartGameButton state
+                    , viewImportGameButton state
+                    , viewExportGameButton state
+                    ]
 
-                Ending (State { team }) ->
-                    []
+                Ending state ->
+                    [ text "You won!"
+                    , br [] []
+                    , viewNewGameButton state
+                    , viewRestartGameButton state
+                    , viewImportGameButton state
+                    , viewExportGameButton state
+                    ]
 
-                Error (State { message }) ->
-                    [ text message ]
+                Error state ->
+                    [ h1 [] [ text "Error!" ]
+                    , state |> untag |> .message |> text
+                    , br [] []
+                    , viewNewGameButton state
+                    , viewRestartGameButton state
+                    , viewImportGameButton state
+                    , viewExportGameButton state
+                    ]
     in
     { title = "Elm Grid War"
     , body = body
