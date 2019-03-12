@@ -15,6 +15,7 @@ import Json.Decode.Extra as DExtra
 import Json.Encode as E
 import Json.Encode.Extra as EExtra
 import List.Extra as LExtra
+import Maybe exposing (Maybe(..))
 import Maybe.Extra as MExtra
 import Platform
 import Platform.Sub
@@ -28,18 +29,22 @@ import Svg exposing (Svg, g, polygon, svg)
 import Svg.Attributes exposing (fill, points, stroke, strokeWidth, style, version, viewBox, x, y)
 import Svg.Events as SvgEvents
 import Svg.Lazy exposing (lazy, lazy2, lazy3)
+import Task
 import Time
 
 
 type Msg
     = NoOp
-    | ShuffledCellList (List ( Hash, Cell ))
-    | RandomCell Int
+    | NewGame
+    | RestartGame
+    | ImportGame
     | Tick Time.Posix
     | Clicked Hash
     | Export
     | Import
     | ExportChanged String
+    | GetSeed (Maybe Int)
+    | UseSeed
 
 
 
@@ -78,43 +83,48 @@ type Msg
 
 type Model
     = Init (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } {})
-    | GettingTimeForNewSeed (State { gettingWaitForStart : Allowed } {})
-    | GettingSeed (State { gettingWaitForStart : Allowed } {})
-    | GettingMapJson (State { gettingWaitForStart : Allowed } {})
-    | WaitForStart (State { attacking : Allowed } { battleField : Battlefield })
-    | Attacking (State { attacking : Allowed } { battleField : Battlefield, team : Team })
-    | Ending (State { ending : Allowed } { team : Team })
+    | GettingTimeForNewSeed (State { waitingForStart : Allowed } {})
+    | GettingSeed (State { gettingSeed : Allowed, waitingForStart : Allowed } { seedSeed : Maybe Int })
+    | GettingMapJson (State { waitingForStart : Allowed } {})
+    | WaitForStart (State { attacking : Allowed } { battlefield : Battlefield })
+    | Attacking (State { ending : Allowed } { battlefield : Battlefield, team : Team })
+    | Ending (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { team : Team })
 
 
 toInit : Model
 toInit =
-    Init <| State {} SM.
+    Init <| State {}
 
 
-toGettingTimeForNewSeed : State { a | waitForStart : Allowed } {  } -> Model
+toGettingTimeForNewSeed : State { a | gettingTimeForNewSeed : Allowed } {} -> Model
 toGettingTimeForNewSeed (State state) =
     GettingTimeForNewSeed <| State state
 
-toGettingSeed : State { a | waitForStart : Allowed } {  } -> Model
-toGettingSeed (State state) =
-    GettingSeed <| State state
 
-toGettingMapJson : State { a | waitForStart : Allowed } {  } -> Model
+toGettingSeed : State { a | gettingSeed : Allowed } b -> Maybe Int -> Model
+toGettingSeed (State _) seedSeed =
+    GettingSeed <| State { seedSeed = seedSeed }
+
+
+toGettingMapJson : State { a | gettingMapJson : Allowed } {} -> Model
 toGettingMapJson (State state) =
     GettingMapJson <| State state
 
-toWaitForStart : State { a | attacking : Allowed } {  }-> Battlefield -> Model
-toWaitForStart (State state) battlefield=
-    WaitForStart <| State {state|battlefield = Battlefield}
 
-toAttacking : State { a | attacking : Allowed } {  } -> Team -> Model
-toAttacking (State state ) team=
-    Attacking <| State {state|team = team}
+toWaitForStart : State { a | waitingForStart : Allowed } b -> Battlefield -> Model
+toWaitForStart (State state) battlefield =
+    WaitForStart <| State { battlefield = battlefield }
 
 
-toEnding : State { a | ending : Allowed } { b|team :Team } -> Model
-toEnding (State state)=
-    Ending <| State team
+toAttacking : State { a | attacking : Allowed } { battlefield : Battlefield } -> Team -> Model
+toAttacking (State state) team =
+    Attacking <| State { battlefield = state.battlefield, team = team }
+
+
+toEnding : State { a | ending : Allowed } { b | team : Team } -> Model
+toEnding (State { team }) =
+    Ending <| State { team = team }
+
 
 type alias MoveState =
     { hash : Hash, movesLeft : Int }
@@ -135,15 +145,15 @@ directions =
     [ NE, E, SE, SW, W, NW ]
 
 
-decodeModel : D.Decoder Model
-decodeModel =
+decodeBattlefield : D.Decoder Battlefield
+decodeBattlefield =
     let
         gather c s h w =
             let
                 map =
                     rectangularPointyTopMap h w
             in
-            Model map h w (Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c) s "" Init (cellsToTeams c)
+            Battlefield map h w (Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c) s "" (cellsToTeams c)
     in
     D.map4
         gather
@@ -360,8 +370,8 @@ cellsToTeams cells =
     cells |> List.map .character |> MExtra.values |> List.map .team |> RollingList.fromList
 
 
-init : flags -> ( Model, Cmd Msg )
-init flags =
+initBattlefield : Random.Seed -> Battlefield
+initBattlefield seed =
     let
         height =
             10
@@ -401,64 +411,91 @@ init flags =
                         }
                     )
     in
-    ( { map = initialMap
-      , cells = initialCells
-      , selectedCell = Nothing
-      , height = height
-      , width = width
-      , export = ""
-      , gameState = Init
-      , teams = initialCells |> Dict.values |> cellsToTeams
-      }
-    , Random.generate ShuffledCellList (initialCells |> Dict.toList |> Random.List.shuffle)
-    )
+    { map = initialMap
+    , cells = initialCells
+    , selectedCell = Nothing
+    , height = height
+    , width = width
+    , export = ""
+    , teams = initialCells |> Dict.values |> cellsToTeams
+    }
+
+
+mergeShuffledCells oldCells shuffledCells =
+    List.map2
+        (\( k, _ ) ( _, v ) -> ( k, v ))
+        (Dict.toList oldCells)
+        shuffledCells
+        |> Dict.fromList
+
+
+init : flags -> ( Model, Cmd Msg )
+init _ =
+    ( toInit, Cmd.none )
+
+
+
+-- , Random.generate ShuffledCellList (initialCells |> Dict.toList |> Random.List.shuffle)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case (msg, model) of
-        (NoOp,_) ->
+    case ( msg, model ) of
+        ( NewGame, Init state ) ->
+            ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
+
+        ( RestartGame, Init state ) ->
+            ( toGettingSeed state Nothing, Cmd.none )
+
+        ( ImportGame, Init state ) ->
             ( model, Cmd.none )
 
-        (Tick posix, GettingTimeForNewSeed (State state) -> 
-            -- ( model, Random.generate RandomCell (Random.int 1 6) )
+        ( Tick posix, GettingTimeForNewSeed state ) ->
+            ( toWaitForStart state <| initBattlefield <| Random.initialSeed <| Time.posixToMillis posix, Cmd.none )
+
+        ( GetSeed seedSeed, GettingSeed state ) ->
+            ( toGettingSeed state seedSeed, Cmd.none )
+
+        ( UseSeed, GettingSeed state ) ->
+            ( model, Cmd.none )
+            -- ( toWaitForStart state <| initBattlefield <| Random.initialSeed <| Time.posixToMillis posix, Cmd.none )
+
+        ( NoOp, GettingSeed state ) ->
             ( model, Cmd.none )
 
-        ShuffledCellList list ->
-            ( { model
-                | cells =
-                    List.map2
-                        (\( k, _ ) ( _, v ) -> ( k, v ))
-                        (Dict.toList model.cells)
-                        list
-                        |> Dict.fromList
-              }
-            , Cmd.none
-            )
-
-        RandomCell seed ->
+        ( NoOp, GettingMapJson state ) ->
             ( model, Cmd.none )
 
-        Clicked cell ->
-            ( { model | selectedCell = Just cell }
-            , Cmd.none
-            )
+        ( NoOp, WaitForStart ((State { battlefield }) as state) ) ->
+            ( model, Cmd.none )
 
-        Export ->
-            -- { model | export = encodeModel model |> E.encode 0 |> E64.string |> E64.encode }
-            ( { model | export = encodeModel model |> E.encode 2 }, Cmd.none )
+        ( NoOp, Attacking ((State { battlefield, team }) as state) ) ->
+            ( model, Cmd.none )
 
-        Import ->
-            -- case model.export |> D64.decode D64.string |> Result.mapError base64ErrorToString |> Result.andThen (D.decodeString decodeModel >> Result.mapError D.errorToString) of
-            case model.export |> D.decodeString decodeModel |> Result.mapError D.errorToString of
-                Ok model2 ->
-                    ( { model2 | export = model.export }, Cmd.none )
+        ( NoOp, Ending ((State { team }) as state) ) ->
+            ( model, Cmd.none )
 
-                Err string ->
-                    ( { model | export = string }, Cmd.none )
-
-        ExportChanged string ->
-            ( { model | export = string }, Cmd.none )
+        -- ( Tick posix, GettingTimeForNewSeed (State state) ) ->
+        -- ( model, Random.generate RandomCell (Random.int 1 6) )
+        -- ( model,  Cmd.none )
+        -- (Clicked cell,  ->
+        --     ( { model | selectedCell = Just cell }
+        --     , Cmd.none
+        --     )
+        -- Export ->
+        --     -- { model | export = encodeModel model |> E.encode 0 |> E64.string |> E64.encode }
+        --     ( { model | export = encodeModel model |> E.encode 2 }, Cmd.none )
+        -- Import ->
+        --     -- case model.export |> D64.decode D64.string |> Result.mapError base64ErrorToString |> Result.andThen (D.decodeString decodeModel >> Result.mapError D.errorToString) of
+        --     case model.export |> D.decodeString decodeBattlefield |> Result.mapError D.errorToString of
+        --         Ok model2 ->
+        --             ( { model2 | export = model.export }, Cmd.none )
+        --         Err string ->
+        --             ( { model | export = string }, Cmd.none )
+        -- ExportChanged string ->
+        --     ( { model | export = string }, Cmd.none )
+        _ ->
+            ( model, Cmd.none )
 
 
 base64ErrorToString : D64.Error -> String
@@ -529,8 +566,8 @@ mapPolygonCorners =
     polygonCorners layout
 
 
-hexGrid : Model -> Html Msg
-hexGrid model =
+hexGrid : Battlefield -> Html Msg
+hexGrid battlefield =
     let
         toSvg : Hash -> String -> Svg Msg
         toSvg hexLocation cornersCoords =
@@ -540,10 +577,10 @@ hexGrid model =
 
         isSelected : Hash -> Bool
         isSelected hash =
-            model.selectedCell |> Maybe.map ((==) hash) |> Maybe.withDefault False
+            battlefield.selectedCell |> Maybe.map ((==) hash) |> Maybe.withDefault False
 
         normalCellColour hash =
-            Dict.get hash model.cells
+            Dict.get hash battlefield.cells
                 |> Maybe.andThen .character
                 |> Maybe.map .team
                 |> Maybe.map
@@ -586,8 +623,8 @@ hexGrid model =
         []
     <|
         List.map2 toSvg
-            (Dict.keys model.map)
-            (List.map (pointsToString << mapPolygonCorners << getCell) (Dict.toList model.map))
+            (Dict.keys battlefield.map)
+            (List.map (pointsToString << mapPolygonCorners << getCell) (Dict.toList battlefield.map))
 
 
 inputDecoder : D.Decoder Msg
@@ -602,45 +639,81 @@ inputDecoder =
 
 view : Model -> Browser.Document Msg
 view model =
+    let
+        body =
+            case model of
+                Init _ ->
+                    [ button [ HtmlEvents.onClick NewGame ] [ text "New Game" ]
+                    , button [ HtmlEvents.onClick RestartGame ] [ text "Restart Game" ]
+                    , button [ HtmlEvents.onClick ImportGame ] [ text "Import Game" ]
+                    ]
+
+                GettingTimeForNewSeed _ ->
+                    []
+
+                GettingSeed _ ->
+                    [ Html.input [ HtmlEvents.onInput (String.toInt >> GetSeed) ]
+                        []
+                    , button [ HtmlEvents.onClick UseSeed ] [ text "Use Seed" ]
+                    ]
+
+                GettingMapJson _ ->
+                    [ button [ HtmlEvents.onClick Import ] [ text "Import" ]
+                    , br [] []
+                    , textarea
+                        [ HtmlEvents.on "input" inputDecoder
+                        , Attributes.cols 100
+                        , Attributes.rows 10
+                        ]
+                        [ text "" ]
+                    ]
+
+                WaitForStart (State { battlefield }) ->
+                    [ div []
+                        [ svg
+                            [ version "1.1"
+                            , x "0"
+                            , y "0"
+                            , Svg.Attributes.height (String.fromInt svgHeight)
+                            , Svg.Attributes.width (String.fromInt svgWidth)
+                            , viewBox viewBoxStringCoords
+                            ]
+                            [ lazy hexGrid battlefield
+                            ]
+                        , br [] []
+                        , button [ HtmlEvents.onClick Export ] [ text "Export" ]
+                        , button [ HtmlEvents.onClick Import ] [ text "Import" ]
+                        , br [] []
+                        , textarea
+                            [ HtmlEvents.on "input" inputDecoder
+                            , Attributes.cols 100
+                            , Attributes.rows 10
+                            ]
+                            [ text "" ]
+
+                        --model.export
+                        ]
+                    ]
+
+                -- Attacking (State { ending : Allowed } { battlefield : Battlefield, team : Team })
+                -- Ending (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { team : Team })
+                _ ->
+                    []
+    in
     { title = "Elm Grid War"
-    , body =
-        [ div []
-            [ svg
-                [ version "1.1"
-                , x "0"
-                , y "0"
-                , Svg.Attributes.height (String.fromInt svgHeight)
-                , Svg.Attributes.width (String.fromInt svgWidth)
-                , viewBox viewBoxStringCoords
-                ]
-                [ lazy hexGrid model
-                ]
-            , br [] []
-            , button [ HtmlEvents.onClick Export ] [ text "Export" ]
-            , button [ HtmlEvents.onClick Import ] [ text "Import" ]
-            , br [] []
-            , textarea
-                [ HtmlEvents.on "input" inputDecoder
-                , Attributes.cols 100
-                , Attributes.rows 10
-                ]
-                [ text model.export ]
-            ]
-        ]
+    , body = body
     }
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    case model.gameState of
-        Init ->
-            Time.every 1000 Tick
-
-        Attack AI ->
-            Time.every 1000 Tick
-
-        _ ->
-            Sub.none
+    -- case model.gameState of
+    -- Init ->
+    --     Time.every 1000 Tick
+    -- Attack AI ->
+    --     Time.every 1000 Tick
+    -- _ ->
+    Sub.none
 
 
 main : Program () Model Msg
