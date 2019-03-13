@@ -1,37 +1,31 @@
 sudo: false
-
 language: node_js
 node_js:
-  # - "4"
-  # - "6"
-  # - "8"
-  - "10"
-
+- '10'
 os:
-  - osx
-  # - linux
-
+- osx
 branches:
   except:
-    - gh-pages
-
+  - gh-pages
 install:
-  - node --version
-  - npm --version
-  - npm install
-
+- node --version
+- npm --version
+- npm install
 before_script:
 - git config --global user.name 'genthaler'
 - git config --global user.email 'genthaler@users.noreply.github.com'
 - git remote set-url origin "https://${GH_TOKEN}@github.com/genthaler/elm-grid-war.git"
-
 script:
-  - npm test
-
+- npm run test
+- npm run deploy
 deploy:
   provider: pages
   skip-cleanup: true
-  github-token: $GITHUB_TOKEN  # Set in the settings page of your repository, as a secure variable
+  github-token: "$GITHUB_TOKEN"
   keep-history: true
   on:
     branch: master
+env:
+  global:
+  - GH_REF: github.com/genthaler/elm-grid-war.git
+  - secure: E0ba2Lj9hufp0DZ3Fu2R6qBBDogzP5GTfzPLfnSsK89uvYw5137LNzubTk5znXm0aIZED9o9EJxao/cFgevjhisNODgzSOqEVjT1uAWLIOl9xicJXV1sWMLh1E/83bTKVfOAeYRa/W8WlzaXLYxqKyvhikRAlLjC+U7FmRedFTExWBR16i4Od2S5VUvM8K1kBFeyMIhJHPkmoRnsfeLMf7DhI/WXF0YkhHrWVXibQVdPiTDDa8KLH+f95Tj9nTcSFpjDQtKQWscDu6rPj4nfe7oxDRMibCks7r210auANuoVXJYjWkShwsIknodJsfbJOndjzjN1Meo87DhcVPo3PLFT8tuTjgsFK+iAwlWRI2QaQvHemu/5Joab3vPOg9TGo1f4dpYO6QojKGBm/qUNMcYGHpslXf09fHLQOs587rOrwiyB23WFm9Ene0A0wBiijsrF6gnoox1/467NHUkDYYMIeap5IJbivSPpbnuVVrJkok7WsYSDinM0TZ0FKe+vDIPr46H50+wPnHql14rXHUAo0YYklLlFK0PquAoF7zh5I1xEO48G89uvpvjreSRq+5OsEVVSjvH83qhJi22GzVgpXsUnxXjoEHlaeUmjZYsJ19WXIuga+SnOv1TCB6PpQI0y/GkJycOudI+EZ+ZgVxtK2h1pTkJlcjr4TerMHI0=
