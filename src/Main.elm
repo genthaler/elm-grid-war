@@ -6,6 +6,7 @@ import Basics.Extra
 import Browser
 import Debug
 import Dict exposing (Dict)
+import Dict.Extra
 import Hexagons.Hex exposing (Direction(..), Hex)
 import Hexagons.Layout exposing (Point, orientationLayoutPointy, polygonCorners)
 import Hexagons.Map exposing (Hash, Map, rectangularPointyTopMap)
@@ -48,38 +49,64 @@ type Msg
     | Cancel
 
 
+type alias MoveState =
+    { hash : Hash, movesLeft : Int }
 
-{-
-   Construct initial UI, new game/saved game/restart game (saved seed)
-   If new game,
-   - Get new seed
-   - shuffle new map,
-   - animate constructing map
-   If restart game
-   - enter seed (prefill with seed if available)
-   - go
-   - shuffle map with seed
-   - animate
-   If saved game,
-   - Get saved map JSON
-   - Go
-   - Parse JSON into map
 
-   - Display map
+type Terrain
+    = Grass
+    | Rock
+    | Mountain
+    | Water
+    | Forest
 
-   - Start game
-   - For each Team
-       - if AI
-           - for each Character in Team
-               - find all valid directions to move
-               - get random direction
-               - if someone there
-                   - fight them
-               - else
-                   go there
-        - if Human
-            later...
--}
+
+type Class
+    = Peasant
+
+
+
+-- | Soldier
+-- | Archer
+-- | Knight
+-- | Sapper
+-- | Squire
+-- | Dog
+-- | Catapult
+-- | Castle
+
+
+type Team
+    = Human
+    | AI
+
+
+type alias Character =
+    { class : Class
+    , team : Team
+    }
+
+
+type alias Cell =
+    { terrain : Terrain
+    , character : Maybe Character
+    }
+
+
+type alias Battlefield =
+    { map : Map
+    , height : Int
+    , width : Int
+    , cells : Dict Hash Cell
+    , selectedCell : Maybe Hash
+    , teams : RollingList.RollingList Team
+    , seed : Random.Seed
+    , initialSeedSeed : Int
+    }
+
+
+directions =
+    [ NE, E, SE, SW, W, NW ]
 
 
 type Model
@@ -133,83 +160,6 @@ toError message =
     Error <| State { message = message }
 
 
-type alias MoveState =
-    { hash : Hash, movesLeft : Int }
-
-
-type alias Battlefield =
-    { map : Map
-    , height : Int
-    , width : Int
-    , cells : Dict Hash Cell
-    , selectedCell : Maybe Hash
-    , teams : RollingList.RollingList Team
-    , seed : Random.Seed
-    , initialSeedSeed : Int
-    }
-
-
-directions =
-    [ NE, E, SE, SW, W, NW ]
-
-
-decodeBattlefield : D.Decoder Battlefield
-decodeBattlefield =
-    let
-        gather c s h w =
-            let
-                map =
-                    rectangularPointyTopMap h w
-
-                cells =
-                    Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c
-            in
-            Battlefield map h w cells s (cellsToTeams c) (Random.initialSeed 1) 1
-    in
-    D.map4
-        gather
-        (D.field "c" <| D.list decodeCell)
-        (D.field "s" <| D.maybe decodeHash)
-        (D.field "h" D.int)
-        (D.field "w" D.int)
-
-
-encodeBattlefield model =
-    E.object
-        [ ( "c", E.list encodeCell <| Dict.values model.cells )
-        , ( "s", EExtra.maybe encodeHash model.selectedCell )
-        , ( "h", E.int model.height )
-        , ( "w", E.int model.width )
-        ]
-
-
-type alias Cell =
-    { terrain : Terrain
-    , character : Maybe Character
-    }
-
-
-decodeCell =
-    D.map2 Cell
-        (D.field "t" decodeTerrain)
-        (D.field "c" <| D.maybe decodeCharacter)
-
-
-encodeCell cell =
-    E.object
-        [ ( "t", encodeTerrain cell.terrain )
-        , ( "c", EExtra.maybe encodeCharacter cell.character )
-        ]
-
-
-type Terrain
-    = Grass
-    | Rock
-    | Mountain
-    | Water
-    | Forest
-
-
 toStringTerrain terrain =
     case terrain of
         Grass ->
@@ -257,40 +207,6 @@ encodeTerrain =
     E.string << toStringTerrain
 
 
-type alias Character =
-    { class : Class
-    , team : Team
-    }
-
-
-decodeCharacter =
-    D.map2 Character
-        (D.field "c" decodeClass)
-        (D.field "t" decodeTeam)
-
-
-encodeCharacter character =
-    E.object
-        [ ( "c", encodeClass character.class )
-        , ( "t", encodeTeam character.team )
-        ]
-
-
-type Class
-    = Peasant
-
-
-
--- | Soldier
--- | Archer
--- | Knight
--- | Sapper
--- | Squire
--- | Dog
--- | Catapult
--- | Castle
-
-
 toStringClass class =
     case class of
         Peasant ->
@@ -313,11 +229,6 @@ decodeClass =
 
 encodeClass =
     E.string << toStringClass
-
-
-type Team
-    = Human
-    | AI
 
 
 toStringTeam team =
@@ -370,10 +281,76 @@ encodeHash ( a, b, c ) =
     E.list E.int [ a, b, c ]
 
 
+decodeCharacter =
+    D.map2 Character
+        (D.field "c" decodeClass)
+        (D.field "t" decodeTeam)
+
+
+encodeCharacter character =
+    E.object
+        [ ( "c", encodeClass character.class )
+        , ( "t", encodeTeam character.team )
+        ]
+
+
+decodeCell =
+    D.map2 Cell
+        (D.field "t" decodeTerrain)
+        (D.field "c" <| D.maybe decodeCharacter)
+
+
+encodeCell cell =
+    E.object
+        [ ( "t", encodeTerrain cell.terrain )
+        , ( "c", EExtra.maybe encodeCharacter cell.character )
+        ]
+
+
 decodeMap =
     D.map2 rectangularPointyTopMap
         (D.field "height" D.int)
         (D.field "width" D.int)
+
+
+decodeBattlefield : D.Decoder Battlefield
+decodeBattlefield =
+    let
+        gather c s h w =
+            let
+                map =
+                    rectangularPointyTopMap h w
+
+                cells =
+                    Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c
+            in
+            Battlefield map h w cells s (cellsToTeams c) (Random.initialSeed 1) 1
+    in
+    D.map4
+        gather
+        (D.field "c" <| D.list decodeCell)
+        (D.field "s" <| D.maybe decodeHash)
+        (D.field "h" D.int)
+        (D.field "w" D.int)
+
+
+encodeBattlefield model =
+    E.object
+        [ ( "c", E.list encodeCell <| Dict.values model.cells )
+        , ( "s", EExtra.maybe encodeHash model.selectedCell )
+        , ( "h", E.int model.height )
+        , ( "w", E.int model.width )
+        ]
+
+
+base64ErrorToString : D64.Error -> String
+base64ErrorToString error =
+    case error of
+        D64.ValidationError ->
+            "ValidationError"
+
+        D64.InvalidByteSequence ->
+            "InvalidByteSequence "
 
 
 cellsToTeams : List Cell -> RollingList.RollingList Team
@@ -456,6 +433,35 @@ crash =
     ( toError "Unexpected message/state combination", Cmd.none )
 
 
+
+{-
+   - For each Team
+       - if AI
+           - for each Character in Team
+               - find all valid directions to move
+               - get random direction
+               - if someone there
+                   - fight them
+               - else
+                   go there
+        - if Human
+            later...
+-}
+
+
+nextMove : Battlefield -> Battlefield
+nextMove battlefield =
+    let
+        team =
+            battlefield.teams |> RollingList.current
+
+        members : Dict Hash Character
+        members =
+            battlefield |> .cells |> Dict.Extra.filterMap (\hash cell -> cell.character)
+    in
+    battlefield
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( model, msg ) of
@@ -533,6 +539,9 @@ update msg model =
         ( Attacking state, Clicked cell ) ->
             ( toAttacking (SM.map (\model2 -> { model2 | selectedCell = Just cell }) state), Cmd.none )
 
+        ( Attacking state, Tick posix ) ->
+            ( toAttacking <| State <| nextMove <| untag <| state, Cmd.none )
+
         ( Ending state, New ) ->
             ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
 
@@ -550,16 +559,6 @@ update msg model =
 
         _ ->
             crash
-
-
-base64ErrorToString : D64.Error -> String
-base64ErrorToString error =
-    case error of
-        D64.ValidationError ->
-            "ValidationError"
-
-        D64.InvalidByteSequence ->
-            "InvalidByteSequence "
 
 
 cellWidth =
@@ -809,13 +808,12 @@ view model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    -- case model.gameState of
-    -- Init ->
-    --     Time.every 1000 Tick
-    -- Attack AI ->
-    --     Time.every 1000 Tick
-    -- _ ->
-    Sub.none
+    case model of
+        Attacking _ ->
+            Time.every 1000 Tick
+
+        _ ->
+            Sub.none
 
 
 main : Program () Model Msg
