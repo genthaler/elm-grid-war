@@ -36,17 +36,15 @@ import Time
 
 
 type Msg
-    = NoOp
-    | NewGame
-    | RestartGame
-    | ImportGame
+    = New
+    | Restart
+    | Import
+    | Export
+    | ExportChanged String
+    | SeedChanged (Maybe Int)
+    | UseSeed
     | Tick Time.Posix
     | Clicked Hash
-    | Export
-    | Import
-    | ExportChanged String
-    | GetSeed (Maybe Int)
-    | UseSeed
 
 
 
@@ -86,11 +84,11 @@ type Msg
 type Model
     = Init (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } {})
     | GettingTimeForNewSeed (State { waitingForStart : Allowed } {})
-    | GettingSeed (State { gettingSeed : Allowed, waitingForStart : Allowed } { seedSeed : Maybe Int })
-    | GettingMapJson (State { waitingForStart : Allowed } { export : String })
-    | WaitForStart (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, attacking : Allowed } { battlefield : Battlefield })
-    | Attacking (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, ending : Allowed } { battlefield : Battlefield, team : Team })
-    | Ending (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { team : Team })
+    | GettingSeed (State { gettingSeed : Allowed, waitingForStart : Allowed } { maybeBattlefield : Maybe Battlefield, seedSeed : Maybe Int })
+    | GettingMapJson (State { waitingForStart : Allowed } { maybeBattlefield : Maybe Battlefield, export : String })
+    | WaitForStart (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, attacking : Allowed } Battlefield)
+    | Attacking (State { attacking : Allowed, gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, ending : Allowed } Battlefield)
+    | Ending (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } Battlefield)
     | Error (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { message : String })
 
 
@@ -104,29 +102,29 @@ toGettingTimeForNewSeed (State state) =
     GettingTimeForNewSeed <| State {}
 
 
-toGettingSeed : State { a | gettingSeed : Allowed } b -> Maybe Int -> Model
-toGettingSeed (State _) seedSeed =
-    GettingSeed <| State { seedSeed = seedSeed }
+toGettingSeed : State { a | gettingSeed : Allowed } { b | maybeBattlefield : Maybe Battlefield } -> Maybe Int -> Model
+toGettingSeed (State state) seedSeed =
+    GettingSeed <| State { maybeBattlefield = state.maybeBattlefield, seedSeed = seedSeed }
 
 
-toGettingMapJson : State { a | gettingMapJson : Allowed } b -> String -> Model
+toGettingMapJson : State { a | gettingMapJson : Allowed } { b | maybeBattlefield : Maybe Battlefield } -> String -> Model
 toGettingMapJson (State state) export =
-    GettingMapJson <| State { export = export }
+    GettingMapJson <| State { maybeBattlefield = state.maybeBattlefield, export = export }
 
 
 toWaitForStart : State { a | waitingForStart : Allowed } b -> Battlefield -> Model
 toWaitForStart (State state) battlefield =
-    WaitForStart <| State { battlefield = battlefield }
+    WaitForStart <| State battlefield
 
 
-toAttacking : State { a | attacking : Allowed } { battlefield : Battlefield } -> Team -> Model
-toAttacking (State state) team =
-    Attacking <| State { battlefield = state.battlefield, team = team }
+toAttacking : State { a | attacking : Allowed } Battlefield -> Model
+toAttacking (State state) =
+    Attacking <| State state
 
 
-toEnding : State { a | ending : Allowed } { b | team : Team } -> Model
-toEnding (State { team }) =
-    Ending <| State { team = team }
+toEnding : State { a | ending : Allowed } Battlefield -> Model
+toEnding (State state) =
+    Ending <| State state
 
 
 toError : String -> Model
@@ -144,7 +142,6 @@ type alias Battlefield =
     , width : Int
     , cells : Dict Hash Cell
     , selectedCell : Maybe Hash
-    , export : String
     , teams : RollingList.RollingList Team
     , seed : Random.Seed
     , initialSeedSeed : Int
@@ -162,8 +159,11 @@ decodeBattlefield =
             let
                 map =
                     rectangularPointyTopMap h w
+
+                cells =
+                    Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c
             in
-            Battlefield map h w (Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c) s "" (cellsToTeams c) (Random.initialSeed 1) 1
+            Battlefield map h w cells s (cellsToTeams c) (Random.initialSeed 1) 1
     in
     D.map4
         gather
@@ -173,7 +173,7 @@ decodeBattlefield =
         (D.field "w" D.int)
 
 
-encodeModel model =
+encodeBattlefield model =
     E.object
         [ ( "c", E.list encodeCell <| Dict.values model.cells )
         , ( "s", EExtra.maybe encodeHash model.selectedCell )
@@ -432,7 +432,6 @@ initBattlefield seedSeed =
     , width = width
     , cells = shuffledCells
     , selectedCell = Nothing
-    , export = ""
     , teams = shuffledCells |> Dict.values |> cellsToTeams
     , seed = newSeed
     , initialSeedSeed = seedSeed
@@ -454,29 +453,23 @@ init _ =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case ( msg, model ) of
-        ( NewGame, Init state ) ->
+    case ( model, msg ) of
+        ( Init state, New ) ->
             ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
 
-        ( NewGame, WaitForStart state ) ->
-            ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
+        ( Init state, Import ) ->
+            ( toGettingMapJson (State { maybeBattlefield = Nothing }) "", Cmd.none )
 
-        ( RestartGame, Init state ) ->
-            ( toGettingSeed state Nothing, Cmd.none )
+        ( Init state, Restart ) ->
+            ( toGettingSeed (State { maybeBattlefield = Nothing }) Nothing, Cmd.none )
 
-        ( RestartGame, WaitForStart state ) ->
-            ( toGettingSeed state Nothing, Cmd.none )
-
-        ( ImportGame, Init state ) ->
-            ( model, Cmd.none )
-
-        ( Tick posix, GettingTimeForNewSeed state ) ->
+        ( GettingTimeForNewSeed state, Tick posix ) ->
             ( toWaitForStart state <| initBattlefield <| Time.posixToMillis posix, Cmd.none )
 
-        ( GetSeed seedSeed, GettingSeed state ) ->
+        ( GettingSeed state, SeedChanged seedSeed ) ->
             ( toGettingSeed state seedSeed, Cmd.none )
 
-        ( UseSeed, GettingSeed state ) ->
+        ( GettingSeed state, UseSeed ) ->
             case state |> SM.untag |> .seedSeed of
                 Just seedSeed ->
                     ( toWaitForStart state <| initBattlefield <| seedSeed, Cmd.none )
@@ -484,37 +477,42 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
-        ( NoOp, GettingMapJson state ) ->
-            ( model, Cmd.none )
-
-        ( NoOp, WaitForStart ((State { battlefield }) as state) ) ->
-            ( model, Cmd.none )
-
-        ( NoOp, Attacking ((State { battlefield, team }) as state) ) ->
-            ( model, Cmd.none )
-
-        ( NoOp, Ending ((State { team }) as state) ) ->
-            ( model, Cmd.none )
-
-        -- ( Tick posix, GettingTimeForNewSeed (State state) ) ->
-        -- ( model, Random.generate RandomCell (Random.int 1 6) )
-        -- ( model,  Cmd.none )
-        -- (Clicked cell,  ->
-        --     ( { model | selectedCell = Just cell }
-        --     , Cmd.none
-        --     )
-        -- Export ->
-        --     -- { model | export = encodeModel model |> E.encode 0 |> E64.string |> E64.encode }
-        --     ( { model | export = encodeModel model |> E.encode 2 }, Cmd.none )
-        -- Import ->
+        -- (GettingMapJson state , ExportChanged export  (State { waitingForStart : Allowed } { maybeBattlefield : Maybe Battlefield, export : String }) ) ->
+        --     ( { model | export = string }, Cmd.none )
+        
         --     -- case model.export |> D64.decode D64.string |> Result.mapError base64ErrorToString |> Result.andThen (D.decodeString decodeModel >> Result.mapError D.errorToString) of
         --     case model.export |> D.decodeString decodeBattlefield |> Result.mapError D.errorToString of
         --         Ok model2 ->
         --             ( { model2 | export = model.export }, Cmd.none )
         --         Err string ->
         --             ( { model | export = string }, Cmd.none )
-        -- ExportChanged string ->
-        --     ( { model | export = string }, Cmd.none )
+        ( WaitForStart state, New ) ->
+            ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
+
+        ( WaitForStart state, Restart ) ->
+            ( toGettingSeed (State { maybeBattlefield = state |> untag |> Just }) (state |> untag |> .initialSeedSeed |> Just), Cmd.none )
+
+        ( WaitForStart state, Import ) ->
+            ( toGettingMapJson (State { maybeBattlefield = state |> untag |> Just }) (state |> untag |> encodeBattlefield |> E.encode 2), Cmd.none )
+
+        ( Attacking state, Clicked cell ) ->
+            ( toAttacking (SM.map (\model2 -> { model2 | selectedCell = Just cell }) state), Cmd.none )
+
+        ( Ending state, New ) ->
+            ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
+
+        ( Ending state, Restart ) ->
+            ( toGettingSeed (State { maybeBattlefield = state |> untag |> Just }) (state |> untag |> .initialSeedSeed |> Just), Cmd.none )
+
+        ( Ending state, Import ) ->
+            ( toGettingMapJson (State { maybeBattlefield = state |> untag |> Just }) (state |> untag |> encodeBattlefield |> E.encode 2), Cmd.none )
+
+        ( Error state, New ) ->
+            ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
+
+        ( Error state, Restart ) ->
+            ( toGettingSeed (State { maybeBattlefield = Nothing }) Nothing, Cmd.none )
+
         _ ->
             ( toError "Unexpected message/state combination", Cmd.none )
 
@@ -658,19 +656,19 @@ inputDecoder =
 -- (at [ "target", "scrollHeight" ] int)
 
 
-viewNewGameButton : State { a | gettingTimeForNewSeed : Allowed } b -> Html Msg
-viewNewGameButton _ =
-    button [ Events.onClick NewGame ] [ text "New Game" ]
+viewNewButton : State { a | gettingTimeForNewSeed : Allowed } b -> Html Msg
+viewNewButton _ =
+    button [ Events.onClick New ] [ text "New Game" ]
 
 
-viewRestartGameButton : State { a | gettingSeed : Allowed } b -> Html Msg
-viewRestartGameButton _ =
-    button [ Events.onClick RestartGame ] [ text "Restart Game" ]
+viewRestartButton : State { a | gettingSeed : Allowed } b -> Html Msg
+viewRestartButton _ =
+    button [ Events.onClick Restart ] [ text "Restart Game" ]
 
 
-viewImportGameButton : State { a | gettingMapJson : Allowed } b -> Html Msg
-viewImportGameButton _ =
-    button [ Events.onClick RestartGame ] [ text "Restart Game" ]
+viewImportButton : State { a | gettingMapJson : Allowed } b -> Html Msg
+viewImportButton _ =
+    button [ Events.onClick Import ] [ text "Import Game" ]
 
 
 viewExportGameButton : State { a | gettingMapJson : Allowed } b -> Html Msg
@@ -684,16 +682,16 @@ view model =
         body =
             case model of
                 Init state ->
-                    [ viewNewGameButton state
-                    , viewRestartGameButton state
-                    , viewImportGameButton state
+                    [ viewNewButton state
+                    , viewRestartButton state
+                    , viewImportButton state
                     ]
 
                 GettingTimeForNewSeed state ->
                     []
 
                 GettingSeed state ->
-                    [ Html.input [ Events.onInput (String.toInt >> GetSeed), state |> untag |> .seedSeed |> Maybe.map String.fromInt |> Maybe.withDefault "" |> Attributes.value ]
+                    [ Html.input [ Events.onInput (String.toInt >> SeedChanged), state |> untag |> .seedSeed |> Maybe.map String.fromInt |> Maybe.withDefault "" |> Attributes.value ]
                         []
                     , button [ Events.onClick UseSeed ] [ text "Use Seed" ]
                     ]
@@ -719,30 +717,30 @@ view model =
                             , Svg.Attributes.width (String.fromInt svgWidth)
                             , viewBox viewBoxStringCoords
                             ]
-                            [ state |> untag |> .battlefield |> lazy hexGrid
+                            [ state |> untag |> lazy hexGrid
                             ]
                         , br [] []
-                        , viewNewGameButton state
-                        , viewRestartGameButton state
-                        , viewImportGameButton state
+                        , viewNewButton state
+                        , viewRestartButton state
+                        , viewImportButton state
                         , viewExportGameButton state
                         ]
                     ]
 
                 Attacking state ->
                     [ br [] []
-                    , viewNewGameButton state
-                    , viewRestartGameButton state
-                    , viewImportGameButton state
+                    , viewNewButton state
+                    , viewRestartButton state
+                    , viewImportButton state
                     , viewExportGameButton state
                     ]
 
                 Ending state ->
                     [ text "You won!"
                     , br [] []
-                    , viewNewGameButton state
-                    , viewRestartGameButton state
-                    , viewImportGameButton state
+                    , viewNewButton state
+                    , viewRestartButton state
+                    , viewImportButton state
                     , viewExportGameButton state
                     ]
 
@@ -750,9 +748,9 @@ view model =
                     [ h1 [] [ text "Error!" ]
                     , state |> untag |> .message |> text
                     , br [] []
-                    , viewNewGameButton state
-                    , viewRestartGameButton state
-                    , viewImportGameButton state
+                    , viewNewButton state
+                    , viewRestartButton state
+                    , viewImportButton state
                     , viewExportGameButton state
                     ]
     in
