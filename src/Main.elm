@@ -45,6 +45,7 @@ type Msg
     | Tick Time.Posix
     | Attack
     | Clicked Hash
+    | Cancel
 
 
 
@@ -497,6 +498,14 @@ update msg model =
                 Nothing ->
                     crash
 
+        ( GettingMapJson state, Cancel ) ->
+            case state |> untag |> .maybeBattlefield of
+                Just battlefield ->
+                    ( toWaitingForStart state battlefield, Cmd.none )
+
+                Nothing ->
+                    ( toInit, Cmd.none )
+
         ( WaitingForStart state, New ) ->
             ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
 
@@ -504,6 +513,21 @@ update msg model =
             ( toGettingSeed (State { maybeBattlefield = state |> untag |> Just }) (state |> untag |> .initialSeedSeed |> Just), Cmd.none )
 
         ( WaitingForStart state, Import ) ->
+            ( toGettingMapJson state (state |> untag |> Just) (state |> untag |> encodeBattlefield |> E.encode 2) (state |> untag |> Just), Cmd.none )
+
+        ( WaitingForStart state, Attack ) ->
+            ( toAttacking state, Cmd.none )
+
+        ( WaitingForStart state, Clicked cell ) ->
+            ( model, Cmd.none )
+
+        ( Attacking state, New ) ->
+            ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
+
+        ( Attacking state, Restart ) ->
+            ( toGettingSeed (State { maybeBattlefield = state |> untag |> Just }) (state |> untag |> .initialSeedSeed |> Just), Cmd.none )
+
+        ( Attacking state, Import ) ->
             ( toGettingMapJson state (state |> untag |> Just) (state |> untag |> encodeBattlefield |> E.encode 2) (state |> untag |> Just), Cmd.none )
 
         ( Attacking state, Clicked cell ) ->
@@ -682,9 +706,28 @@ viewImportButton _ =
     button [ Events.onClick Import ] [ text "Import/Export Game" ]
 
 
-viewAttackButton : State { a | waitingForStart : Allowed } b -> Html Msg
+viewCancelButton : State { a | waitingForStart : Allowed } b -> Html Msg
+viewCancelButton _ =
+    button [ Events.onClick Cancel ] [ text "Cancel" ]
+
+
+viewAttackButton : State { a | attacking : Allowed } b -> Html Msg
 viewAttackButton _ =
     button [ Events.onClick Attack ] [ text "Attack" ]
+
+
+viewBattlefield : State { a | attacking : Allowed } Battlefield -> Html Msg
+viewBattlefield state =
+    svg
+        [ version "1.1"
+        , x "0"
+        , y "0"
+        , Svg.Attributes.height (String.fromInt svgHeight)
+        , Svg.Attributes.width (String.fromInt svgWidth)
+        , viewBox viewBoxStringCoords
+        ]
+        [ state |> untag |> lazy hexGrid
+        ]
 
 
 view : Model -> Browser.Document Msg
@@ -713,6 +756,7 @@ view model =
                             state |> untag |> .maybeNewBattlefield |> MExtra.isNothing
                     in
                     [ button [ Events.onClick Import, Attributes.disabled importButtonDisabled ] [ text "Import" ]
+                    , viewCancelButton state
                     , br [] []
                     , textarea
                         [ Events.on "input" inputDecoder
@@ -724,17 +768,9 @@ view model =
 
                 WaitingForStart state ->
                     [ div []
-                        [ svg
-                            [ version "1.1"
-                            , x "0"
-                            , y "0"
-                            , Svg.Attributes.height (String.fromInt svgHeight)
-                            , Svg.Attributes.width (String.fromInt svgWidth)
-                            , viewBox viewBoxStringCoords
-                            ]
-                            [ state |> untag |> lazy hexGrid
-                            ]
+                        [ viewBattlefield state
                         , br [] []
+                        , viewAttackButton state
                         , viewNewButton state
                         , viewRestartButton state
                         , viewImportButton state
@@ -742,7 +778,8 @@ view model =
                     ]
 
                 Attacking state ->
-                    [ br [] []
+                    [ viewBattlefield state
+                    , br [] []
                     , viewNewButton state
                     , viewRestartButton state
                     , viewImportButton state
