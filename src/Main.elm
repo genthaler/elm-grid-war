@@ -2,7 +2,7 @@ module Main exposing (main)
 
 import Base64.Decode as D64
 import Base64.Encode as E64
-import Basics.Extra
+import Basics.Extra exposing (flip)
 import Browser
 import Debug
 import Dict exposing (Dict)
@@ -23,6 +23,7 @@ import Maybe.Extra
 import Platform
 import Platform.Sub
 import Random
+import Random.Dict
 import Random.List
 import Result.Extra as RExtra
 import RollingList
@@ -87,15 +88,21 @@ type alias Character =
     }
 
 
-type alias Cell =
+type alias SemiCell =
     { terrain : Terrain
     , character : Maybe Character
     }
 
 
+type alias Cell =
+    { terrain : Terrain
+    , character : Maybe Character
+    , hex : Hex
+    }
+
+
 type alias Battlefield =
-    { map : Map
-    , height : Int
+    { height : Int
     , width : Int
     , cells : Dict Hash Cell
     , selectedCell : Maybe Hash
@@ -295,7 +302,7 @@ encodeCharacter character =
 
 
 decodeCell =
-    D.map2 Cell
+    D.map2 SemiCell
         (D.field "t" decodeTerrain)
         (D.field "c" <| D.maybe decodeCharacter)
 
@@ -316,15 +323,20 @@ decodeMap =
 decodeBattlefield : D.Decoder Battlefield
 decodeBattlefield =
     let
+        gather : List SemiCell -> Maybe Hash -> Int -> Int -> Battlefield
         gather c s h w =
             let
                 map =
                     rectangularPointyTopMap h w
 
                 cells =
-                    Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c
+                    List.map2 Tuple.pair (Dict.keys map) c
+
+                mergedCells =
+                    List.map2 (\( k1, v1 ) ( k2, v2 ) -> ( k1, Cell v2.terrain v2.character v1 )) (Dict.toList map) cells
+                        |> Dict.fromList
             in
-            Battlefield map h w cells s (cellsToTeams c) (Random.initialSeed 1) 1
+            Battlefield h w mergedCells s (cellsToTeams c) (Random.initialSeed 1) 1
     in
     D.map4
         gather
@@ -353,7 +365,7 @@ base64ErrorToString error =
             "InvalidByteSequence "
 
 
-cellsToTeams : List Cell -> RollingList.RollingList Team
+cellsToTeams : List { a | character : Maybe { b | team : Team } } -> RollingList.RollingList Team
 cellsToTeams cells =
     cells |> List.map .character |> Maybe.Extra.values |> List.map .team |> RollingList.fromList
 
@@ -398,15 +410,15 @@ initBattlefield seedSeed =
 
                                 _ ->
                                     Nothing
+                        , hex = v
                         }
                     )
                 |> Dict.toList
                 |> Random.List.shuffle
-                |> Basics.Extra.flip Random.step seed
+                |> flip Random.step seed
                 |> Tuple.mapFirst (mergeShuffledCells initialMap)
     in
-    { map = initialMap
-    , height = height
+    { height = height
     , width = width
     , cells = shuffledCells
     , selectedCell = Nothing
@@ -429,53 +441,100 @@ init _ =
     ( toInit, Cmd.none )
 
 
-crash =
-    ( toError "Unexpected message/state combination", Cmd.none )
+crash message =
+    ( toError message, Cmd.none )
+
+
+invalidMessageState =
+    crash "Unexpected message/state combination"
 
 
 
 {-
-   - For each Team
-       - if AI
-           - for each Character in Team
-               - find all valid directions to move
-               - get random direction
-               - if someone there
-                   - fight them
-               - else
-                   go there
-        - if Human
-            later...
+   - init
+      - Update all team members with new remaining moves
+
+   - get current team
+      - if AI
+           - get random team member with remaining moves
+           - if there is one,
+                - get random cell that is in range that is on the map, has no team members on it
+                    - decrement moves remaining
+                    - if someone there
+                        - fight them (randomly)
+                            - if alive
+                                - increase XP
+                                - update new cell
+                    - else
+                        - go there
+                           - update new cell
+                    - clear previous cell of character
+
+            - else
+                - next team
+                  - Update all team members with new remaining moves
+
+      - if Human
+          later...
 -}
 
 
-nextMove : Battlefield -> Battlefield
+type alias CellRef =
+    ( Hash, Cell )
+
+
+type alias FightResult =
+    { src : CellRef, dest : CellRef, attackSuccessful : Bool }
+
+
+{-| todo fix this; if there's no team, do something sensible
+-}
+getCurrentTeam : Battlefield -> Result String Team
+getCurrentTeam b =
+    b.teams |> RollingList.current |> Result.fromMaybe "There's no team left!"
+
+
+getTeamMembers : Dict Hash Cell -> Team -> Dict Hash Cell
+getTeamMembers cells team =
+    Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False) cells
+
+
+randomCell : Dict Hash Cell -> Random.Generator (Maybe ( Hash, Cell ))
+randomCell =
+    Dict.toList >> Random.List.choose >> Random.map Tuple.first
+
+
+inRange : ( Hash, Cell ) -> ( Hash, Cell ) -> Bool
+inRange (( _, a ) as srcRef) (( _, b ) as destRef) =
+    Hexagons.Hex.distance a.hex b.hex <= 1 && (Maybe.map2 (\c1 c2 -> c1.team /= c2.team) a.character b.character |> Maybe.withDefault True)
+
+
+randomDestination : ( Hash, Cell ) -> Dict Hash Cell -> Random.Generator (Maybe ( Hash, Cell ))
+randomDestination (( hash, cell ) as cellRef) =
+    Dict.filter (\k v -> Tuple.pair k v |> inRange cellRef)
+        >> Dict.toList
+        >> Random.List.choose
+        >> Random.map Tuple.first
+
+
+randomFight : ( Hash, Cell ) -> ( Hash, Cell ) -> Random.Generator FightResult
+randomFight srcRef destRef =
+    Random.int 0 1 |> Random.map ((==) 1) |> Random.map (FightResult srcRef destRef)
+
+
+nextMove : Battlefield -> Result String Battlefield
 nextMove battlefield =
-    let
-        -- todo fix this; if there's no team, do something sensible
-        team =
-            battlefield.teams |> RollingList.current |> Maybe.withDefault AI
-
-        mapToCharacter : Dict Hash Cell -> Dict Hash Character
-        mapToCharacter =
-            Dict.Extra.filterMap (\hash cell -> cell.character)
-
-        allCharacters : Dict Hash Character
-        allCharacters =
-            battlefield |> .cells |> mapToCharacter
-
-        teamMembers : Dict Hash Character
-        teamMembers =
-            allCharacters |> Dict.filter (always (identity >> (.team >> (==) team)))
-
-        randomCharacter : Dict Hash Character -> Random.Seed ->  ((Maybe (Hash, Character), List (Hash, Character)), Random.Seed )
-        randomCharacter characters seed= Random.step (Random.List.choose (Dict.toList characters)) seed  
+    getCurrentTeam battlefield
+        |> Result.map (getTeamMembers battlefield.cells)
+        |> Result.map randomCell
+        |> Result.map (always battlefield)
 
 
-        -- validDestinations : Dict Hash Character -> Dict Hash Cell
-        -- validDestinations characterRef = List.map (Hexagons.Hex.neighbor 
-    in
-    battlefield
+
+-- let
+--     (x, seed1) = Random.step (Random.int 0 100) battlefield.seed
+--     (y, seed2) = Random.step (Random.int 0 100) seed1
+--     (z, seed3) = Random.step (Random.int 0 100) seed2
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -502,7 +561,7 @@ update msg model =
                     ( toWaitingForStart state <| initBattlefield <| seedSeed, Cmd.none )
 
                 Nothing ->
-                    crash
+                    invalidMessageState
 
         ( GettingMapJson (State state), MapJsonChanged mapJson ) ->
             case mapJson |> D.decodeString decodeBattlefield |> Result.mapError D.errorToString of
@@ -518,7 +577,7 @@ update msg model =
                     ( toWaitingForStart state newBattlefield, Cmd.none )
 
                 Nothing ->
-                    crash
+                    invalidMessageState
 
         ( GettingMapJson state, Cancel ) ->
             case state |> untag |> .maybeBattlefield of
@@ -556,7 +615,12 @@ update msg model =
             ( toAttacking (SM.map (\model2 -> { model2 | selectedCell = Just cell }) state), Cmd.none )
 
         ( Attacking state, Tick posix ) ->
-            ( toAttacking <| State <| nextMove <| untag <| state, Cmd.none )
+            case nextMove <| untag <| state of
+                Ok battlefield ->
+                    ( toAttacking <| State <| battlefield, Cmd.none )
+
+                Err error ->
+                    crash error
 
         ( Ending state, New ) ->
             ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
@@ -574,7 +638,7 @@ update msg model =
             ( toGettingSeed (State { maybeBattlefield = Nothing }) Nothing, Cmd.none )
 
         _ ->
-            crash
+            invalidMessageState
 
 
 cellWidth =
@@ -625,11 +689,6 @@ pointToStringCoords ( x, y ) =
     String.fromFloat x ++ "," ++ String.fromFloat y
 
 
-getCell : ( Hash, Hex ) -> Hex
-getCell =
-    Tuple.second
-
-
 mapPolygonCorners : Hex -> List Point
 mapPolygonCorners =
     polygonCorners layout
@@ -638,11 +697,11 @@ mapPolygonCorners =
 hexGrid : Battlefield -> Html Msg
 hexGrid battlefield =
     let
-        toSvg : Hash -> String -> Svg Msg
-        toSvg hexLocation cornersCoords =
+        toSvg : Hash -> Cell -> Svg Msg
+        toSvg hexLocation cell =
             g
                 []
-                (toPolygon hexLocation cornersCoords)
+                (toPolygon hexLocation (pointsToString <| mapPolygonCorners <| cell.hex))
 
         isSelected : Hash -> Bool
         isSelected hash =
@@ -691,9 +750,8 @@ hexGrid battlefield =
     g
         []
     <|
-        List.map2 toSvg
-            (Dict.keys battlefield.map)
-            (List.map (pointsToString << mapPolygonCorners << getCell) (Dict.toList battlefield.map))
+        Dict.values <|
+            Dict.map toSvg battlefield.cells
 
 
 inputDecoder : D.Decoder Msg
