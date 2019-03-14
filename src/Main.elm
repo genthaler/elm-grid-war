@@ -19,7 +19,7 @@ import Json.Encode as E
 import Json.Encode.Extra as EExtra
 import List.Extra as LExtra
 import Maybe exposing (Maybe(..))
-import Maybe.Extra as MExtra
+import Maybe.Extra
 import Platform
 import Platform.Sub
 import Random
@@ -355,7 +355,7 @@ base64ErrorToString error =
 
 cellsToTeams : List Cell -> RollingList.RollingList Team
 cellsToTeams cells =
-    cells |> List.map .character |> MExtra.values |> List.map .team |> RollingList.fromList
+    cells |> List.map .character |> Maybe.Extra.values |> List.map .team |> RollingList.fromList
 
 
 initBattlefield : Int -> Battlefield
@@ -452,12 +452,28 @@ crash =
 nextMove : Battlefield -> Battlefield
 nextMove battlefield =
     let
+        -- todo fix this; if there's no team, do something sensible
         team =
-            battlefield.teams |> RollingList.current
+            battlefield.teams |> RollingList.current |> Maybe.withDefault AI
 
-        members : Dict Hash Character
-        members =
-            battlefield |> .cells |> Dict.Extra.filterMap (\hash cell -> cell.character)
+        mapToCharacter : Dict Hash Cell -> Dict Hash Character
+        mapToCharacter =
+            Dict.Extra.filterMap (\hash cell -> cell.character)
+
+        allCharacters : Dict Hash Character
+        allCharacters =
+            battlefield |> .cells |> mapToCharacter
+
+        teamMembers : Dict Hash Character
+        teamMembers =
+            allCharacters |> Dict.filter (always (identity >> (.team >> (==) team)))
+
+        randomCharacter : Dict Hash Character -> Random.Seed ->  ((Maybe (Hash, Character), List (Hash, Character)), Random.Seed )
+        randomCharacter characters seed= Random.step (Random.List.choose (Dict.toList characters)) seed  
+
+
+        -- validDestinations : Dict Hash Character -> Dict Hash Cell
+        -- validDestinations characterRef = List.map (Hexagons.Hex.neighbor 
     in
     battlefield
 
@@ -752,7 +768,7 @@ view model =
                 GettingMapJson state ->
                     let
                         importButtonDisabled =
-                            state |> untag |> .maybeNewBattlefield |> MExtra.isNothing
+                            state |> untag |> .maybeNewBattlefield |> Maybe.Extra.isNothing
                     in
                     [ button [ Events.onClick Import, Attributes.disabled importButtonDisabled ] [ text "Import" ]
                     , viewCancelButton state
