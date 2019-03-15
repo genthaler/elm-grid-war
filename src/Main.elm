@@ -494,9 +494,9 @@ getCurrentTeam b =
     b.teams |> RollingList.current |> Result.fromMaybe "There's no team left!"
 
 
-getTeamMembers : Dict Hash Cell -> Team -> Dict Hash Cell
-getTeamMembers cells team =
-    Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False) cells
+getTeamMembers : Team -> Dict Hash Cell -> Dict Hash Cell
+getTeamMembers team =
+    Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False) 
 
 
 randomCell : Dict Hash Cell -> Random.Generator (Maybe ( Hash, Cell ))
@@ -522,11 +522,22 @@ randomFight srcRef destRef =
     Random.int 0 1 |> Random.map ((==) 1) |> Random.map (FightResult srcRef destRef)
 
 
+liftRandomError : (Result x a, b) -> Result x (a, b)
+liftRandomError tuple = 
+    case tuple of
+        (Err x, _) ->
+            Err x
+        (Ok a, b) ->
+            Ok (a, b)
+
+
 nextMove : Battlefield -> Result String Battlefield
 nextMove battlefield =
     getCurrentTeam battlefield
-        |> Result.map (getTeamMembers battlefield.cells)
-        |> Result.map randomCell
+        |> Result.map ((flip getTeamMembers) battlefield.cells)
+        |> Result.map (\cells -> Random.step (randomCell cells) battlefield.seed |> Tuple.mapFirst (Result.fromMaybe "Couldn't find a fighter"))
+        |> Result.andThen liftRandomError
+        -- |> Result.map (\(cell, seed1) -> Random.step (randomDestination cell battlefield.cells) seed1) 
         |> Result.map (always battlefield)
 
 
