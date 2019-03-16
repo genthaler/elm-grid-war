@@ -22,7 +22,7 @@ import Maybe exposing (Maybe(..))
 import Maybe.Extra
 import Platform
 import Platform.Sub
-import Random
+import Random exposing (Generator)
 import Random.Dict
 import Random.List
 import Result.Extra as RExtra
@@ -496,10 +496,10 @@ getCurrentTeam b =
 
 getTeamMembers : Team -> Dict Hash Cell -> Dict Hash Cell
 getTeamMembers team =
-    Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False) 
+    Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False)
 
 
-randomCell : Dict Hash Cell -> Random.Generator (Maybe ( Hash, Cell ))
+randomCell : Dict Hash Cell -> Generator (Maybe ( Hash, Cell ))
 randomCell =
     Dict.toList >> Random.List.choose >> Random.map Tuple.first
 
@@ -509,7 +509,7 @@ inRange (( _, a ) as srcRef) (( _, b ) as destRef) =
     Hexagons.Hex.distance a.hex b.hex <= 1 && (Maybe.map2 (\c1 c2 -> c1.team /= c2.team) a.character b.character |> Maybe.withDefault True)
 
 
-randomDestination : ( Hash, Cell ) -> Dict Hash Cell -> Random.Generator (Maybe ( Hash, Cell ))
+randomDestination : ( Hash, Cell ) -> Dict Hash Cell -> Generator (Maybe ( Hash, Cell ))
 randomDestination (( hash, cell ) as cellRef) =
     Dict.filter (\k v -> Tuple.pair k v |> inRange cellRef)
         >> Dict.toList
@@ -517,27 +517,37 @@ randomDestination (( hash, cell ) as cellRef) =
         >> Random.map Tuple.first
 
 
-randomFight : ( Hash, Cell ) -> ( Hash, Cell ) -> Random.Generator FightResult
+randomFight : ( Hash, Cell ) -> ( Hash, Cell ) -> Generator FightResult
 randomFight srcRef destRef =
     Random.int 0 1 |> Random.map ((==) 1) |> Random.map (FightResult srcRef destRef)
 
 
-liftRandomError : (Result x a, b) -> Result x (a, b)
-liftRandomError tuple = 
+liftRandomResult : ( Result x a, b ) -> Result x ( a, b )
+liftRandomResult tuple =
     case tuple of
-        (Err x, _) ->
+        ( Err x, _ ) ->
             Err x
-        (Ok a, b) ->
-            Ok (a, b)
+
+        ( Ok a, b ) ->
+            Ok ( a, b )
 
 
 nextMove : Battlefield -> Result String Battlefield
 nextMove battlefield =
+    let
+        z : Result String Team
+        z =
+            getCurrentTeam battlefield
+    in
     getCurrentTeam battlefield
-        |> Result.map ((flip getTeamMembers) battlefield.cells)
-        |> Result.map (\cells -> Random.step (randomCell cells) battlefield.seed |> Tuple.mapFirst (Result.fromMaybe "Couldn't find a fighter"))
-        |> Result.andThen liftRandomError
-        -- |> Result.map (\(cell, seed1) -> Random.step (randomDestination cell battlefield.cells) seed1) 
+        |> Result.map (flip getTeamMembers battlefield.cells)
+        -- Team
+        |> Result.map (\cells -> Random.step (randomCell cells) battlefield.seed)
+        -- Dict Hash Cell
+        |> Result.map (Tuple.mapFirst <| Result.fromMaybe "Couldn't find a fighter")
+        -- (Cell, Hash)
+        |> Result.andThen liftRandomResult
+        -- |> Result.map (\(cell, seed1) -> Random.step (randomDestination cell battlefield.cells) seed1)
         |> Result.map (always battlefield)
 
 
