@@ -22,7 +22,7 @@ import Maybe exposing (Maybe(..))
 import Maybe.Extra
 import Platform
 import Platform.Sub
-import Random exposing (Generator)
+import Random exposing (Generator, Seed)
 import Random.Dict
 import Random.List
 import Result.Extra as RExtra
@@ -107,7 +107,7 @@ type alias Battlefield =
     , cells : Dict Hash Cell
     , selectedCell : Maybe Hash
     , teams : RollingList.RollingList Team
-    , seed : Random.Seed
+    , seed : Seed
     , initialSeedSeed : Int
     }
 
@@ -517,37 +517,35 @@ randomDestination (( hash, cell ) as cellRef) =
         >> Random.map Tuple.first
 
 
-randomFight : ( Hash, Cell ) -> ( Hash, Cell ) -> Generator FightResult
-randomFight srcRef destRef =
+randomFight : ( ( Hash, Cell ), ( Hash, Cell ) ) -> Generator FightResult
+randomFight ( destRef, srcRef ) =
     Random.int 0 1 |> Random.map ((==) 1) |> Random.map (FightResult srcRef destRef)
 
 
-liftRandomResult : ( Result x a, b ) -> Result x ( a, b )
-liftRandomResult tuple =
+liftRandomResult : x -> ( Maybe a, b ) -> Result x ( a, b )
+liftRandomResult x tuple =
     case tuple of
-        ( Err x, _ ) ->
+        ( Nothing, _ ) ->
             Err x
 
-        ( Ok a, b ) ->
+        ( Just a, b ) ->
             Ok ( a, b )
 
 
 nextMove : Battlefield -> Result String Battlefield
 nextMove battlefield =
     let
-        z : Result String Team
+        z : Result String ( ( ( Hash, Cell ), ( Hash, Cell ) ), Seed )
         z =
             getCurrentTeam battlefield
+                |> Result.map (flip getTeamMembers battlefield.cells)
+                |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftRandomResult "Couldn't find a fighter")
+                |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> liftRandomResult "Couldn't find a destination" |> Result.map (Tuple.mapFirst (Tuple.pair cell)))
     in
     getCurrentTeam battlefield
         |> Result.map (flip getTeamMembers battlefield.cells)
-        -- Team
-        |> Result.map (\cells -> Random.step (randomCell cells) battlefield.seed)
-        -- Dict Hash Cell
-        |> Result.map (Tuple.mapFirst <| Result.fromMaybe "Couldn't find a fighter")
-        -- (Cell, Hash)
-        |> Result.andThen liftRandomResult
-        -- |> Result.map (\(cell, seed1) -> Random.step (randomDestination cell battlefield.cells) seed1)
+        |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftRandomResult "Couldn't find a fighter")
+        |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> liftRandomResult "Couldn't find a destination" |> Result.map (Tuple.mapFirst (Tuple.pair cell)))
         |> Result.map (always battlefield)
 
 
