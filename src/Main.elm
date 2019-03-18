@@ -50,10 +50,6 @@ type Msg
     | Cancel
 
 
-type alias MoveState =
-    { hash : Hash, movesLeft : Int }
-
-
 type Terrain
     = Grass
     | Rock
@@ -85,6 +81,7 @@ type Team
 type alias Character =
     { class : Class
     , team : Team
+    , movesLeft : Int
     }
 
 
@@ -107,10 +104,6 @@ type alias CellMap =
 
 type alias CellRef =
     ( Hash, Cell )
-
-
-type alias FightResult =
-    { src : CellRef, dest : CellRef, attackSuccessful : Bool }
 
 
 type alias Battlefield =
@@ -301,9 +294,10 @@ encodeHash ( a, b, c ) =
 
 
 decodeCharacter =
-    D.map2 Character
+    D.map3 Character
         (D.field "c" decodeClass)
         (D.field "t" decodeTeam)
+        (D.succeed 0)
 
 
 encodeCharacter character =
@@ -409,16 +403,10 @@ initBattlefield seedSeed =
                         , character =
                             case modBy 5 x of
                                 0 ->
-                                    Just
-                                        { class = Peasant
-                                        , team = Human
-                                        }
+                                    Just <| Character Peasant Human 0
 
                                 1 ->
-                                    Just
-                                        { class = Peasant
-                                        , team = AI
-                                        }
+                                    Just <| Character Peasant AI 0
 
                                 _ ->
                                     Nothing
@@ -463,31 +451,36 @@ invalidMessageState =
 
 
 {-
-   - init
-      - Update all team members with new remaining moves
 
-   - get current team
-      - if AI
-           - get random team member with remaining moves
-           - if there is one,
-                - get random cell that is in range that is on the map, has no team members on it
-                    - decrement moves remaining
-                    - if someone there
-                        - fight them (randomly)
-                            - if alive
-                                - increase XP
-                                - update new cell
-                    - else
-                        - go there
-                           - update new cell
-                    - clear previous cell of character
+   Need two phases; find the next move, then execute it.
 
-            - else
-                - next team
-                  - Update all team members with new remaining moves
+   So need to find the next team + fighter + target, then execute it
 
-      - if Human
-          later...
+      - init
+         - Update all team members with new remaining moves
+
+      - get current team
+         - if AI
+              - get random team member with remaining moves
+              - if there is one,
+                   - get random cell that is in range that is on the map, has no team members on it
+                       - decrement moves remaining
+                       - if someone there
+                           - fight them (randomly)
+                               - if alive
+                                   - increase XP
+                                   - update new cell
+                       - else
+                           - go there
+                              - update new cell
+                       - clear previous cell of character
+
+               - else
+                   - next team
+                     - Update all team members with new remaining moves
+
+         - if Human
+             later...
 -}
 
 
@@ -498,14 +491,21 @@ getCurrentTeam b =
     b.teams |> RollingList.current |> Result.fromMaybe "There's no team left!"
 
 
-getTeamMembers : Team -> CellMap -> CellMap
+getTeamMembers : Team -> Dict Hash Cell -> Dict Hash Cell
 getTeamMembers team =
     Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False)
 
 
+randomDice : Int -> Int -> Generator Bool
+randomDice max succeed =
+    Random.int 1 max |> Random.map ((<=) succeed)
+
+
 randomCell : CellMap -> Generator (Result String CellRef)
 randomCell =
-    Dict.toList >> Random.List.choose >> Random.map Tuple.first 
+    Dict.toList
+        >> Random.List.choose
+        >> Random.map Tuple.first
         >> Random.map (Result.fromMaybe "Couldn't find a fighter")
 
 
@@ -514,25 +514,45 @@ inRange (( _, a ) as srcRef) (( _, b ) as destRef) =
     Hexagons.Hex.distance a.hex b.hex <= 1 && (Maybe.map2 (\c1 c2 -> c1.team /= c2.team) a.character b.character |> Maybe.withDefault True)
 
 
-randomDestination : CellRef -> CellMap -> Generator (Result String CellRef)
+randomDestination : CellRef -> CellMap -> Generator (Result String ( CellRef, CellRef ))
 randomDestination (( hash, cell ) as cellRef) =
     Dict.filter (\k v -> Tuple.pair k v |> inRange cellRef)
         >> Dict.toList
         >> Random.List.choose
         >> Random.map Tuple.first
+        >> Random.map (Maybe.map (Tuple.pair cellRef))
         >> Random.map (Result.fromMaybe "Couldn't find a destination")
 
 
 randomFight : Battlefield -> ( CellRef, CellRef ) -> Generator (Result String Battlefield)
 randomFight battlefield ( srcRef, destRef ) =
-    -- Random.int 0 1 |> Random.map ((==) 1) |> Random.map (FightResult srcRef destRef)
-    Random.constant <| Ok battlefield
+    randomDice 2 1
+        |> Random.map
+            (\win ->
+                battlefield
+                    |> (if win then
+                            moveTo srcRef destRef
+
+                        else
+                            removeFrom srcRef
+                       )
+                    |> Ok
+            )
+
+
+moveTo : CellRef -> CellRef -> Battlefield -> Battlefield
+moveTo (( srcHash, srcCell ) as srcRef) (( destHash, destCell ) as destRef) battlefield =
+    { battlefield | cells = battlefield.cells |> Dict.insert destHash { destCell | character = srcCell.character } }
+
+
+removeFrom : CellRef -> Battlefield -> Battlefield
+removeFrom (( srcHash, srcCell ) as srcRef) battlefield =
+    { battlefield | cells = battlefield.cells |> Dict.insert srcHash { srcCell | character = Nothing } }
 
 
 randomGo : Battlefield -> ( CellRef, CellRef ) -> Generator (Result String Battlefield)
 randomGo battlefield ( srcRef, destRef ) =
-    -- Random.int 0 1 |> Random.map ((==) 1) |> Random.map (FightResult srcRef destRef)
-    Random.constant <| Ok battlefield
+    Random.constant <| Ok <| moveTo srcRef destRef battlefield
 
 
 randomFightOrGo : Battlefield -> ( CellRef, CellRef ) -> Generator (Result String Battlefield)
@@ -550,41 +570,24 @@ randomFightOrGo battlefield ( ( _, src ) as srcRef, ( _, dest ) as destRef ) =
 
 
 liftRandomMaybe : x -> ( Maybe a, b ) -> Result x ( a, b )
-liftRandomMaybe x tuple =
-    case tuple of
-        ( Nothing, _ ) ->
-            Err x
-
-        ( Just a, b ) ->
-            Ok ( a, b )
+liftRandomMaybe x ( a, b ) =
+    Maybe.map (flip Tuple.pair b) a |> Result.fromMaybe x
 
 
 liftResultRandom : ( Result x a, b ) -> Result x ( a, b )
-liftResultRandom tuple =
-    case tuple of
-        ( Err x, _ ) ->
-            Err x
-
-        ( Ok a, b ) ->
-            Ok ( a, b )
+liftResultRandom ( a, b ) =
+    Result.map (flip Tuple.pair b) a
 
 
 nextMove : Battlefield -> Result String Battlefield
 nextMove battlefield =
-    -- let
-        -- w : Result String (CellRef, CellRef)
-        -- w = 
-        --     getCurrentTeam battlefield
-        --     |> Result.map (flip getTeamMembers battlefield.cells)
-        --     |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftResultRandom|> Result.map (Tuple.first>> (Tuple.pair cell)))
-            -- |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> Tuple.mapFirst (Result.map  )
-    -- in
     getCurrentTeam battlefield
         |> Result.map (flip getTeamMembers battlefield.cells)
-        |> Result.map (\cells -> Random.step (randomCell cells) battlefield.seed)
-        -- |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> Tuple.mapFirst (Result.map (Tuple.pair cell)) |> liftResultRandom )
-        -- |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo battlefield pair) seed |> Tuple.first)
-        |> Result.map (always battlefield)
+        |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftResultRandom)
+        |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> liftResultRandom)
+        |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo battlefield pair) seed |> liftResultRandom)
+        |> Result.map Tuple.first
+
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
