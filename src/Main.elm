@@ -101,10 +101,22 @@ type alias Cell =
     }
 
 
+type alias CellMap =
+    Dict Hash Cell
+
+
+type alias CellRef =
+    ( Hash, Cell )
+
+
+type alias FightResult =
+    { src : CellRef, dest : CellRef, attackSuccessful : Bool }
+
+
 type alias Battlefield =
     { height : Int
     , width : Int
-    , cells : Dict Hash Cell
+    , cells : CellMap
     , selectedCell : Maybe Hash
     , teams : RollingList.RollingList Team
     , seed : Seed
@@ -479,14 +491,6 @@ invalidMessageState =
 -}
 
 
-type alias CellRef =
-    ( Hash, Cell )
-
-
-type alias FightResult =
-    { src : CellRef, dest : CellRef, attackSuccessful : Bool }
-
-
 {-| todo fix this; if there's no team, do something sensible
 -}
 getCurrentTeam : Battlefield -> Result String Team
@@ -494,36 +498,59 @@ getCurrentTeam b =
     b.teams |> RollingList.current |> Result.fromMaybe "There's no team left!"
 
 
-getTeamMembers : Team -> Dict Hash Cell -> Dict Hash Cell
+getTeamMembers : Team -> CellMap -> CellMap
 getTeamMembers team =
     Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False)
 
 
-randomCell : Dict Hash Cell -> Generator (Maybe ( Hash, Cell ))
+randomCell : CellMap -> Generator (Result String CellRef)
 randomCell =
-    Dict.toList >> Random.List.choose >> Random.map Tuple.first
+    Dict.toList >> Random.List.choose >> Random.map Tuple.first 
+        >> Random.map (Result.fromMaybe "Couldn't find a fighter")
 
 
-inRange : ( Hash, Cell ) -> ( Hash, Cell ) -> Bool
+inRange : CellRef -> CellRef -> Bool
 inRange (( _, a ) as srcRef) (( _, b ) as destRef) =
     Hexagons.Hex.distance a.hex b.hex <= 1 && (Maybe.map2 (\c1 c2 -> c1.team /= c2.team) a.character b.character |> Maybe.withDefault True)
 
 
-randomDestination : ( Hash, Cell ) -> Dict Hash Cell -> Generator (Maybe ( Hash, Cell ))
+randomDestination : CellRef -> CellMap -> Generator (Result String CellRef)
 randomDestination (( hash, cell ) as cellRef) =
     Dict.filter (\k v -> Tuple.pair k v |> inRange cellRef)
         >> Dict.toList
         >> Random.List.choose
         >> Random.map Tuple.first
+        >> Random.map (Result.fromMaybe "Couldn't find a destination")
 
 
-randomFight : ( ( Hash, Cell ), ( Hash, Cell ) ) -> Generator FightResult
-randomFight ( destRef, srcRef ) =
-    Random.int 0 1 |> Random.map ((==) 1) |> Random.map (FightResult srcRef destRef)
+randomFight : Battlefield -> ( CellRef, CellRef ) -> Generator (Result String Battlefield)
+randomFight battlefield ( srcRef, destRef ) =
+    -- Random.int 0 1 |> Random.map ((==) 1) |> Random.map (FightResult srcRef destRef)
+    Random.constant <| Ok battlefield
 
 
-liftRandomResult : x -> ( Maybe a, b ) -> Result x ( a, b )
-liftRandomResult x tuple =
+randomGo : Battlefield -> ( CellRef, CellRef ) -> Generator (Result String Battlefield)
+randomGo battlefield ( srcRef, destRef ) =
+    -- Random.int 0 1 |> Random.map ((==) 1) |> Random.map (FightResult srcRef destRef)
+    Random.constant <| Ok battlefield
+
+
+randomFightOrGo : Battlefield -> ( CellRef, CellRef ) -> Generator (Result String Battlefield)
+randomFightOrGo battlefield ( ( _, src ) as srcRef, ( _, dest ) as destRef ) =
+    case ( src.character, dest.character ) of
+        ( Just srcTeam, Just destTeam ) ->
+            if srcTeam /= destTeam then
+                randomFight battlefield ( srcRef, destRef )
+
+            else
+                Random.constant (Err "We're trying to fight a team mate, shouldn't have happened")
+
+        _ ->
+            randomGo battlefield ( srcRef, destRef )
+
+
+liftRandomMaybe : x -> ( Maybe a, b ) -> Result x ( a, b )
+liftRandomMaybe x tuple =
     case tuple of
         ( Nothing, _ ) ->
             Err x
@@ -532,29 +559,32 @@ liftRandomResult x tuple =
             Ok ( a, b )
 
 
+liftResultRandom : ( Result x a, b ) -> Result x ( a, b )
+liftResultRandom tuple =
+    case tuple of
+        ( Err x, _ ) ->
+            Err x
+
+        ( Ok a, b ) ->
+            Ok ( a, b )
+
+
 nextMove : Battlefield -> Result String Battlefield
 nextMove battlefield =
-    let
-        z : Result String ( ( ( Hash, Cell ), ( Hash, Cell ) ), Seed )
-        z =
-            getCurrentTeam battlefield
-                |> Result.map (flip getTeamMembers battlefield.cells)
-                |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftRandomResult "Couldn't find a fighter")
-                |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> liftRandomResult "Couldn't find a destination" |> Result.map (Tuple.mapFirst (Tuple.pair cell)))
-    in
+    -- let
+        -- w : Result String (CellRef, CellRef)
+        -- w = 
+        --     getCurrentTeam battlefield
+        --     |> Result.map (flip getTeamMembers battlefield.cells)
+        --     |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftResultRandom|> Result.map (Tuple.first>> (Tuple.pair cell)))
+            -- |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> Tuple.mapFirst (Result.map  )
+    -- in
     getCurrentTeam battlefield
         |> Result.map (flip getTeamMembers battlefield.cells)
-        |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftRandomResult "Couldn't find a fighter")
-        |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> liftRandomResult "Couldn't find a destination" |> Result.map (Tuple.mapFirst (Tuple.pair cell)))
+        |> Result.map (\cells -> Random.step (randomCell cells) battlefield.seed)
+        -- |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> Tuple.mapFirst (Result.map (Tuple.pair cell)) |> liftResultRandom )
+        -- |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo battlefield pair) seed |> Tuple.first)
         |> Result.map (always battlefield)
-
-
-
--- let
---     (x, seed1) = Random.step (Random.int 0 100) battlefield.seed
---     (y, seed2) = Random.step (Random.int 0 100) seed1
---     (z, seed3) = Random.step (Random.int 0 100) seed2
-
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
