@@ -451,16 +451,21 @@ invalidMessageState =
 
 
 {-
+   Want to use my existing code, i.e. finding problems, so I have something to report to the UI
+
+   So get all team members (report if empty), get all pairs (report if empty)
+   Perhaps make it a Result (List String) b so I can add to the errors?
+   But then I can't continue and find the right move. Perhaps use the Either container?
 
    Need two phases; find the next move, then execute it.
 
    What are the possible moves?
-        - roll dice to see who starts
-        - start the game
-        - timed moves
-        - manual moves
-        - end turn
-        - end game
+            - roll dice to see who starts
+            - start the game
+            - timed moves
+            - manual moves
+            - end turn
+            - end game
 
    So need to find the next team + fighter + target, then execute it
 
@@ -520,6 +525,13 @@ randomCell =
 inRange : CellRef -> CellRef -> Bool
 inRange (( _, a ) as srcRef) (( _, b ) as destRef) =
     Hexagons.Hex.distance a.hex b.hex <= 1 && (Maybe.map2 (\c1 c2 -> c1.team /= c2.team) a.character b.character |> Maybe.withDefault True)
+
+
+
+-- possibleDestinations : CellRef -> CellMap -> List ( CellRef, CellRef )
+-- possibleDestinations (( hash, cell ) as cellRef) =
+--     Dict.filter (\k v -> Tuple.pair k v |> inRange cellRef)
+--         >> Dict.toList
 
 
 randomDestination : CellRef -> CellMap -> Generator (Result String ( CellRef, CellRef ))
@@ -585,6 +597,25 @@ liftRandomMaybe x ( a, b ) =
 liftResultRandom : ( Result x a, b ) -> Result x ( a, b )
 liftResultRandom ( a, b ) =
     Result.map (flip Tuple.pair b) a
+
+
+type Move
+    = Move CellRef CellRef
+    | AttackRef CellRef CellRef
+    | TurnOver
+
+
+
+-- Need to get all players who can move, not find all unfinished players then move them.
+-- Thats' a Random.andThen
+-- possibleMoves : Battlefield -> List ( CellRef, CellRef )
+-- possibleMoves battlefield =
+--     getCurrentTeam battlefield
+--         |> Result.map (flip getTeamMembers battlefield.cells)
+--         |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftResultRandom)
+--         |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> liftResultRandom)
+--         |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo battlefield pair) seed |> liftResultRandom)
+--         |> Result.map Tuple.first
 
 
 nextMove : Battlefield -> Result String Battlefield
