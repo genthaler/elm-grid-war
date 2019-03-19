@@ -454,6 +454,14 @@ invalidMessageState =
 
    Need two phases; find the next move, then execute it.
 
+   What are the possible moves?
+        - roll dice to see who starts
+        - start the game
+        - timed moves
+        - manual moves
+        - end turn
+        - end game
+
    So need to find the next team + fighter + target, then execute it
 
       - init
