@@ -127,7 +127,8 @@ type Model
     | GettingSeed (State { gettingSeed : Allowed, waitingForStart : Allowed } { maybeBattlefield : Maybe Battlefield, seedSeed : Maybe Int })
     | GettingMapJson (State { waitingForStart : Allowed } { maybeBattlefield : Maybe Battlefield, mapJson : String, maybeNewBattlefield : Maybe Battlefield })
     | WaitingForStart (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, attacking : Allowed } Battlefield)
-    | Attacking (State { attacking : Allowed, gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, ending : Allowed } Battlefield)
+    | Attacking (State { attacking : Allowed, gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, turningOver:Allowed, ending : Allowed } Battlefield)
+    | TurningOver (State { attacking : Allowed, gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } Battlefield)
     | Ending (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } Battlefield)
     | Error (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { message : String })
 
@@ -160,6 +161,11 @@ toWaitingForStart _ battlefield =
 toAttacking : State { a | attacking : Allowed } Battlefield -> Model
 toAttacking (State state) =
     Attacking <| State state
+
+
+toTurningOver : State { a | turningOver : Allowed } Battlefield -> Model
+toTurningOver (State state) =
+    TurningOver <| State state
 
 
 toEnding : State { a | ending : Allowed } Battlefield -> Model
@@ -455,7 +461,8 @@ invalidMessageState =
 
    So get all team members (report if empty), get all pairs (report if empty)
    Perhaps make it a Result (List String) b so I can add to the errors?
-   But then I can't continue and find the right move. Perhaps use the Either container?
+   But then I can't continue and find the right move. Perhaps use the Either container? Or just a Tuple?
+   Also, don't forget to use the state machine
 
    Need two phases; find the next move, then execute it.
 
@@ -597,12 +604,6 @@ liftRandomMaybe x ( a, b ) =
 liftResultRandom : ( Result x a, b ) -> Result x ( a, b )
 liftResultRandom ( a, b ) =
     Result.map (flip Tuple.pair b) a
-
-
-type Move
-    = Move CellRef CellRef
-    | AttackRef CellRef CellRef
-    | TurnOver
 
 
 
@@ -942,6 +943,14 @@ view model =
                     ]
 
                 Attacking state ->
+                    [ viewBattlefield state
+                    , br [] []
+                    , viewNewButton state
+                    , viewRestartButton state
+                    , viewImportButton state
+                    ]
+
+                TurningOver state ->
                     [ viewBattlefield state
                     , br [] []
                     , viewNewButton state
