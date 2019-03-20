@@ -2,7 +2,7 @@ module Main exposing (main)
 
 import Base64.Decode as D64
 import Base64.Encode as E64
-import Basics.Extra exposing (flip)
+import Basics.Extra exposing (curry, flip, uncurry)
 import Browser
 import Debug
 import Dict exposing (Dict)
@@ -127,7 +127,7 @@ type Model
     | GettingSeed (State { gettingSeed : Allowed, waitingForStart : Allowed } { maybeBattlefield : Maybe Battlefield, seedSeed : Maybe Int })
     | GettingMapJson (State { waitingForStart : Allowed } { maybeBattlefield : Maybe Battlefield, mapJson : String, maybeNewBattlefield : Maybe Battlefield })
     | WaitingForStart (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, attacking : Allowed } Battlefield)
-    | Attacking (State { attacking : Allowed, gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, turningOver:Allowed, ending : Allowed } Battlefield)
+    | Attacking (State { attacking : Allowed, gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, turningOver : Allowed, ending : Allowed } Battlefield)
     | TurningOver (State { attacking : Allowed, gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } Battlefield)
     | Ending (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } Battlefield)
     | Error (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { message : String })
@@ -462,17 +462,10 @@ invalidMessageState =
    So get all team members (report if empty), get all pairs (report if empty)
    Perhaps make it a Result (List String) b so I can add to the errors?
    But then I can't continue and find the right move. Perhaps use the Either container? Or just a Tuple?
+   Make distinction between exceptions and logging messages
    Also, don't forget to use the state machine
 
    Need two phases; find the next move, then execute it.
-
-   What are the possible moves?
-            - roll dice to see who starts
-            - start the game
-            - timed moves
-            - manual moves
-            - end turn
-            - end game
 
    So need to find the next team + fighter + target, then execute it
 
@@ -494,26 +487,12 @@ invalidMessageState =
                            - go there
                               - update new cell
                        - clear previous cell of character
-
                - else
                    - next team
                      - Update all team members with new remaining moves
-
          - if Human
              later...
 -}
-
-
-{-| todo fix this; if there's no team, do something sensible
--}
-getCurrentTeam : Battlefield -> Result String Team
-getCurrentTeam b =
-    b.teams |> RollingList.current |> Result.fromMaybe "There's no team left!"
-
-
-getTeamMembers : Team -> Dict Hash Cell -> Dict Hash Cell
-getTeamMembers team =
-    Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False)
 
 
 randomDice : Int -> Int -> Generator Bool
@@ -529,16 +508,45 @@ randomCell =
         >> Random.map (Result.fromMaybe "Couldn't find a fighter")
 
 
+getCurrentTeam : Battlefield -> Result String Team
+getCurrentTeam b =
+    b.teams |> RollingList.current |> Result.fromMaybe "There's no team left!"
+
+
+getTeamMembers : Team -> Dict Hash Cell -> Dict Hash Cell
+getTeamMembers team =
+    Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False)
+
+
 inRange : CellRef -> CellRef -> Bool
 inRange (( _, a ) as srcRef) (( _, b ) as destRef) =
     Hexagons.Hex.distance a.hex b.hex <= 1 && (Maybe.map2 (\c1 c2 -> c1.team /= c2.team) a.character b.character |> Maybe.withDefault True)
 
 
+sameCellRef : CellRef -> CellRef -> Bool
+sameCellRef =
+    let
+        z : CellRef -> CellRef -> ( CellRef, CellRef )
+        z =
+            Tuple.pair
+    in
+    -- uncurry >> Tuple.mapBoth Tuple.first Tuple.first >> curry (==)
+    always (always True)
 
--- possibleDestinations : CellRef -> CellMap -> List ( CellRef, CellRef )
--- possibleDestinations (( hash, cell ) as cellRef) =
---     Dict.filter (\k v -> Tuple.pair k v |> inRange cellRef)
---         >> Dict.toList
+
+sameTeam : CellRef -> CellRef -> Bool
+sameTeam (( h1, c1 ) as cellRef1) (( h2, c2 ) as cellRef2) =
+    True
+
+
+allMoves : CellRef -> CellMap -> List ( CellRef, CellRef )
+allMoves cellRef =
+    Dict.toList >> List.map (Tuple.pair cellRef)
+
+
+possibleDestinations : CellRef -> CellMap -> List ( CellRef, CellRef )
+possibleDestinations (( hash, cell ) as cellRef) =
+    allMoves cellRef >> List.filter (Basics.Extra.uncurry sameTeam)
 
 
 randomDestination : CellRef -> CellMap -> Generator (Result String ( CellRef, CellRef ))
