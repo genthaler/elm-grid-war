@@ -3,6 +3,7 @@ module Main exposing (main)
 import Base64.Decode as D64
 import Base64.Encode as E64
 import Basics.Extra exposing (curry, flip, uncurry)
+import Bool.Extra
 import Browser
 import Debug
 import Dict exposing (Dict)
@@ -518,25 +519,26 @@ getTeamMembers team =
     Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False)
 
 
-inRange : CellRef -> CellRef -> Bool
-inRange (( _, a ) as srcRef) (( _, b ) as destRef) =
+inRange : ( CellRef, CellRef ) -> Bool
+inRange ( ( _, a ) as srcRef, ( _, b ) as destRef ) =
     Hexagons.Hex.distance a.hex b.hex <= 1 && (Maybe.map2 (\c1 c2 -> c1.team /= c2.team) a.character b.character |> Maybe.withDefault True)
 
 
-sameCellRef : CellRef -> CellRef -> Bool
+sameCellRef : ( CellRef, CellRef ) -> Bool
 sameCellRef =
+    Tuple.mapBoth Tuple.first Tuple.first >> uncurry (==)
+
+
+sameTeam : ( CellRef, CellRef ) -> Bool
+sameTeam =
     let
-        z : CellRef -> CellRef -> ( CellRef, CellRef )
-        z =
-            Tuple.pair
+        getTeam : CellRef -> Maybe Team
+        getTeam =
+            Tuple.second >> .character >> Maybe.map .team
     in
-    -- uncurry >> Tuple.mapBoth Tuple.first Tuple.first >> curry (==)
-    always (always True)
-
-
-sameTeam : CellRef -> CellRef -> Bool
-sameTeam (( h1, c1 ) as cellRef1) (( h2, c2 ) as cellRef2) =
-    True
+    Tuple.mapBoth getTeam getTeam
+        >> uncurry (Maybe.map2 (==))
+        >> Maybe.withDefault False
 
 
 allMoves : CellRef -> CellMap -> List ( CellRef, CellRef )
@@ -544,23 +546,21 @@ allMoves cellRef =
     Dict.toList >> List.map (Tuple.pair cellRef)
 
 
-possibleDestinations : CellRef -> CellMap -> List ( CellRef, CellRef )
-possibleDestinations (( hash, cell ) as cellRef) =
-    allMoves cellRef >> List.filter (Basics.Extra.uncurry sameTeam)
+validMoves : CellRef -> CellMap -> List ( CellRef, CellRef )
+validMoves (( hash, cell ) as cellRef) =
+    allMoves cellRef >> List.filter (Bool.Extra.allPass [ sameCellRef, sameTeam, inRange ])
 
 
-randomDestination : CellRef -> CellMap -> Generator (Result String ( CellRef, CellRef ))
-randomDestination (( hash, cell ) as cellRef) =
-    Dict.filter (\k v -> Tuple.pair k v |> inRange cellRef)
-        >> Dict.toList
+randomMove : CellRef -> CellMap -> Generator (Result String ( CellRef, CellRef ))
+randomMove (( hash, cell ) as cellRef) =
+    validMoves cellRef
         >> Random.List.choose
         >> Random.map Tuple.first
-        >> Random.map (Maybe.map (Tuple.pair cellRef))
         >> Random.map (Result.fromMaybe "Couldn't find a destination")
 
 
-randomFight : Battlefield -> ( CellRef, CellRef ) -> Generator (Result String Battlefield)
-randomFight battlefield ( srcRef, destRef ) =
+randomFight : ( CellRef, CellRef ) -> Battlefield -> Generator (Result String Battlefield)
+randomFight ( srcRef, destRef ) battlefield =
     randomDice 2 1
         |> Random.map
             (\win ->
@@ -595,7 +595,7 @@ randomFightOrGo battlefield ( ( _, src ) as srcRef, ( _, dest ) as destRef ) =
     case ( src.character, dest.character ) of
         ( Just srcTeam, Just destTeam ) ->
             if srcTeam /= destTeam then
-                randomFight battlefield ( srcRef, destRef )
+                randomFight ( srcRef, destRef ) battlefield
 
             else
                 Random.constant (Err "We're trying to fight a team mate, shouldn't have happened")
@@ -614,25 +614,12 @@ liftResultRandom ( a, b ) =
     Result.map (flip Tuple.pair b) a
 
 
-
--- Need to get all players who can move, not find all unfinished players then move them.
--- Thats' a Random.andThen
--- possibleMoves : Battlefield -> List ( CellRef, CellRef )
--- possibleMoves battlefield =
---     getCurrentTeam battlefield
---         |> Result.map (flip getTeamMembers battlefield.cells)
---         |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftResultRandom)
---         |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> liftResultRandom)
---         |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo battlefield pair) seed |> liftResultRandom)
---         |> Result.map Tuple.first
-
-
 nextMove : Battlefield -> Result String Battlefield
 nextMove battlefield =
     getCurrentTeam battlefield
         |> Result.map (flip getTeamMembers battlefield.cells)
         |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftResultRandom)
-        |> Result.andThen (\( cell, seed ) -> Random.step (randomDestination cell battlefield.cells) seed |> liftResultRandom)
+        |> Result.andThen (\( cell, seed ) -> Random.step (randomMove cell battlefield.cells) seed |> liftResultRandom)
         |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo battlefield pair) seed |> liftResultRandom)
         |> Result.map Tuple.first
 
