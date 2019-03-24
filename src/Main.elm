@@ -83,6 +83,7 @@ type alias Character =
     { class : Class
     , team : Team
     , movesLeft : Int
+    , experience : Int
     }
 
 
@@ -105,6 +106,10 @@ type alias CellMap =
 
 type alias CellRef =
     ( Hash, Cell )
+
+
+type alias CellRefPair =
+    ( CellRef, CellRef )
 
 
 type alias Battlefield =
@@ -301,10 +306,11 @@ encodeHash ( a, b, c ) =
 
 
 decodeCharacter =
-    D.map3 Character
+    D.map4 Character
         (D.field "c" decodeClass)
         (D.field "t" decodeTeam)
         (D.succeed 0)
+        (D.succeed 1)
 
 
 encodeCharacter character =
@@ -410,10 +416,10 @@ initBattlefield seedSeed =
                         , character =
                             case modBy 5 x of
                                 0 ->
-                                    Just <| Character Peasant Human 0
+                                    Just <| Character Peasant Human 0 1
 
                                 1 ->
-                                    Just <| Character Peasant AI 0
+                                    Just <| Character Peasant AI 0 1
 
                                 _ ->
                                     Nothing
@@ -519,17 +525,17 @@ getTeamMembers team =
     Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False)
 
 
-inRange : ( CellRef, CellRef ) -> Bool
+inRange : CellRefPair -> Bool
 inRange ( ( _, a ) as srcRef, ( _, b ) as destRef ) =
     Hexagons.Hex.distance a.hex b.hex <= 1 && (Maybe.map2 (\c1 c2 -> c1.team /= c2.team) a.character b.character |> Maybe.withDefault True)
 
 
-sameCellRef : ( CellRef, CellRef ) -> Bool
+sameCellRef : CellRefPair -> Bool
 sameCellRef =
     Tuple.mapBoth Tuple.first Tuple.first >> uncurry (==)
 
 
-sameTeam : ( CellRef, CellRef ) -> Bool
+sameTeam : CellRefPair -> Bool
 sameTeam =
     let
         getTeam : CellRef -> Maybe Team
@@ -541,17 +547,17 @@ sameTeam =
         >> Maybe.withDefault False
 
 
-allMoves : CellRef -> CellMap -> List ( CellRef, CellRef )
+allMoves : CellRef -> CellMap -> List CellRefPair
 allMoves cellRef =
     Dict.toList >> List.map (Tuple.pair cellRef)
 
 
-validMoves : CellRef -> CellMap -> List ( CellRef, CellRef )
+validMoves : CellRef -> CellMap -> List CellRefPair
 validMoves (( hash, cell ) as cellRef) =
-    allMoves cellRef >> List.filter (Bool.Extra.allPass [ sameCellRef, sameTeam, inRange ])
+    allMoves cellRef >> List.filter (Bool.Extra.allPass [ not << sameCellRef, not << sameTeam, inRange ])
 
 
-randomMove : CellRef -> CellMap -> Generator (Result String ( CellRef, CellRef ))
+randomMove : CellRef -> CellMap -> Generator (Result String CellRefPair)
 randomMove (( hash, cell ) as cellRef) =
     validMoves cellRef
         >> Random.List.choose
@@ -559,49 +565,80 @@ randomMove (( hash, cell ) as cellRef) =
         >> Random.map (Result.fromMaybe "Couldn't find a destination")
 
 
-randomFight : ( CellRef, CellRef ) -> Battlefield -> Generator (Result String Battlefield)
+moveTo : CellRefPair -> CellRefPair
+moveTo ( ( srcHash, srcCell ), ( destHash, destCell ) ) =
+    ( ( srcHash, { srcCell | character = Nothing } )
+    , ( destHash, { destCell | character = srcCell.character } )
+    )
+
+
+subsume : CellRefPair -> CellRefPair
+subsume ( ( srcHash, srcCell ), ( destHash, destCell ) ) =
+    ( ( srcHash, { srcCell | character = Nothing } )
+    , ( destHash
+      , { destCell
+            | character =
+                destCell.character
+                    |> Maybe.map2
+                        (\srcCharacter destCharacter ->
+                            { destCharacter | experience = destCharacter.experience + srcCharacter.experience }
+                        )
+                        srcCell.character
+        }
+      )
+    )
+
+
+updateCellRef : CellRef -> Battlefield -> Battlefield
+updateCellRef (( hash, cell ) as cellRef) battlefield =
+    { battlefield | cells = Dict.insert hash cell battlefield.cells }
+
+
+updateCellRefPair : CellRefPair -> Battlefield -> Battlefield
+updateCellRefPair ( cellRef1, cellRef2 ) =
+    updateCellRef cellRef1 >> updateCellRef cellRef2
+
+
+removeFrom : CellRef -> CellRef
+removeFrom ( srcHash, srcCell ) =
+    ( srcHash, { srcCell | character = Nothing } )
+
+
+fight : CellRefPair -> Battlefield -> Bool -> Result String Battlefield
+fight ( srcRef, destRef ) battlefield win =
+    battlefield
+        |> (if win then
+                updateCellRefPair (subsume ( srcRef, destRef ))
+
+            else
+                updateCellRef (removeFrom srcRef)
+           )
+        |> Ok
+
+
+randomFight : CellRefPair -> Battlefield -> Generator (Result String Battlefield)
 randomFight ( srcRef, destRef ) battlefield =
     randomDice 2 1
-        |> Random.map
-            (\win ->
-                battlefield
-                    |> (if win then
-                            moveTo srcRef destRef
-
-                        else
-                            removeFrom srcRef
-                       )
-                    |> Ok
-            )
+        |> Random.map (fight ( srcRef, destRef ) battlefield)
 
 
-moveTo : CellRef -> CellRef -> Battlefield -> Battlefield
-moveTo (( srcHash, srcCell ) as srcRef) (( destHash, destCell ) as destRef) battlefield =
-    { battlefield | cells = battlefield.cells |> Dict.insert destHash { destCell | character = srcCell.character } }
+randomGo : CellRefPair -> Battlefield -> Generator (Result String Battlefield)
+randomGo pair =
+    Random.constant << Ok << updateCellRefPair (moveTo pair)
 
 
-removeFrom : CellRef -> Battlefield -> Battlefield
-removeFrom (( srcHash, srcCell ) as srcRef) battlefield =
-    { battlefield | cells = battlefield.cells |> Dict.insert srcHash { srcCell | character = Nothing } }
-
-
-randomGo : Battlefield -> ( CellRef, CellRef ) -> Generator (Result String Battlefield)
-randomGo battlefield ( srcRef, destRef ) =
-    Random.constant <| Ok <| moveTo srcRef destRef battlefield
-
-
-randomFightOrGo : Battlefield -> ( CellRef, CellRef ) -> Generator (Result String Battlefield)
-randomFightOrGo battlefield ( ( _, src ) as srcRef, ( _, dest ) as destRef ) =
+randomFightOrGo : CellRefPair -> Battlefield -> Generator (Result String Battlefield)
+randomFightOrGo ( ( _, src ) as srcRef, ( _, dest ) as destRef ) =
     case ( src.character, dest.character ) of
         ( Just srcTeam, Just destTeam ) ->
             if srcTeam /= destTeam then
-                randomFight ( srcRef, destRef ) battlefield
+                randomFight ( srcRef, destRef )
 
             else
-                Random.constant (Err "We're trying to fight a team mate, shouldn't have happened")
+                Random.constant << always (Err "We're trying to fight a team mate, shouldn't have happened")
 
         _ ->
-            randomGo battlefield ( srcRef, destRef )
+            randomGo ( srcRef, destRef )
 
 
 liftRandomMaybe : x -> ( Maybe a, b ) -> Result x ( a, b )
@@ -620,8 +657,8 @@ nextMove battlefield =
         |> Result.map (flip getTeamMembers battlefield.cells)
         |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftResultRandom)
         |> Result.andThen (\( cell, seed ) -> Random.step (randomMove cell battlefield.cells) seed |> liftResultRandom)
-        |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo battlefield pair) seed |> liftResultRandom)
-        |> Result.map Tuple.first
+        |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo pair battlefield) seed |> liftResultRandom)
+        |> Result.map (\( battlefield2, seed ) -> { battlefield2 | seed = seed })
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
