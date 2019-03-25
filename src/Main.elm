@@ -21,6 +21,7 @@ import Json.Encode.Extra as EExtra
 import List.Extra as LExtra
 import Maybe exposing (Maybe(..))
 import Maybe.Extra
+import Pair
 import Platform
 import Platform.Sub
 import Random exposing (Generator, Seed)
@@ -120,6 +121,7 @@ type alias Battlefield =
     , teams : RollingList.RollingList Team
     , seed : Seed
     , initialSeedSeed : Int
+    , messages : List String
     }
 
 
@@ -355,7 +357,7 @@ decodeBattlefield =
                     List.map2 (\( k1, v1 ) ( k2, v2 ) -> ( k1, Cell v2.terrain v2.character v1 )) (Dict.toList map) cells
                         |> Dict.fromList
             in
-            Battlefield h w mergedCells s (cellsToTeams c) (Random.initialSeed 1) 1
+            Battlefield h w mergedCells s (cellsToTeams c) (Random.initialSeed 1) 1 []
     in
     D.map4
         gather
@@ -438,6 +440,7 @@ initBattlefield seedSeed =
     , teams = shuffledCells |> Dict.values |> cellsToTeams
     , seed = newSeed
     , initialSeedSeed = seedSeed
+    , messages = []
     }
 
 
@@ -464,41 +467,29 @@ invalidMessageState =
 
 
 {-
-   Want to use my existing code, i.e. finding problems, so I have something to report to the UI
+   - init
+      - Update all team members with new remaining moves
 
-   So get all team members (report if empty), get all pairs (report if empty)
-   Perhaps make it a Result (List String) b so I can add to the errors?
-   But then I can't continue and find the right move. Perhaps use the Either container? Or just a Tuple?
-   Make distinction between exceptions and logging messages
-   Also, don't forget to use the state machine
-
-   Need two phases; find the next move, then execute it.
-
-   So need to find the next team + fighter + target, then execute it
-
-      - init
-         - Update all team members with new remaining moves
-
-      - get current team
-         - if AI
-              - get random team member with remaining moves
-              - if there is one,
-                   - get random cell that is in range that is on the map, has no team members on it
-                       - decrement moves remaining
-                       - if someone there
-                           - fight them (randomly)
-                               - if alive
-                                   - increase XP
-                                   - update new cell
-                       - else
-                           - go there
-                              - update new cell
-                       - clear previous cell of character
-               - else
-                   - next team
-                     - Update all team members with new remaining moves
-         - if Human
-             later...
+   - get current team
+      - if AI
+           - get random team member with remaining moves
+           - if there is one,
+                - get random cell that is in range that is on the map, has no team members on it
+                    - decrement moves remaining
+                    - if someone there
+                        - fight them (randomly)
+                            - if alive
+                                - increase XP
+                                - update new cell
+                    - else
+                        - go there
+                           - update new cell
+                    - clear previous cell of character
+            - else
+                - next team
+                  - Update all team members with new remaining moves
+      - if Human
+          later...
 -}
 
 
@@ -526,34 +517,31 @@ getTeamMembers team =
 
 
 inRange : CellRefPair -> Bool
-inRange ( ( _, a ) as srcRef, ( _, b ) as destRef ) =
-    Hexagons.Hex.distance a.hex b.hex <= 1 && (Maybe.map2 (\c1 c2 -> c1.team /= c2.team) a.character b.character |> Maybe.withDefault True)
+inRange =
+    Pair.mapBoth (Pair.second >> .hex)
+        >> Pair.fold Hexagons.Hex.distance
+        >> (>=) 1
 
 
 sameCellRef : CellRefPair -> Bool
 sameCellRef =
-    Tuple.mapBoth Tuple.first Tuple.first >> uncurry (==)
+    Pair.fold (==)
 
 
 sameTeam : CellRefPair -> Bool
 sameTeam =
-    let
-        getTeam : CellRef -> Maybe Team
-        getTeam =
-            Tuple.second >> .character >> Maybe.map .team
-    in
-    Tuple.mapBoth getTeam getTeam
-        >> uncurry (Maybe.map2 (==))
+    Pair.mapBoth (Pair.second >> .character >> Maybe.map .team)
+        >> Pair.fold (Maybe.map2 (==))
         >> Maybe.withDefault False
 
 
 allMoves : CellRef -> CellMap -> List CellRefPair
 allMoves cellRef =
-    Dict.toList >> List.map (Tuple.pair cellRef)
+    Dict.toList >> List.map (Pair.pair cellRef)
 
 
 validMoves : CellRef -> CellMap -> List CellRefPair
-validMoves (( hash, cell ) as cellRef) =
+validMoves cellRef =
     allMoves cellRef >> List.filter (Bool.Extra.allPass [ not << sameCellRef, not << sameTeam, inRange ])
 
 
@@ -561,7 +549,7 @@ randomMove : CellRef -> CellMap -> Generator (Result String CellRefPair)
 randomMove (( hash, cell ) as cellRef) =
     validMoves cellRef
         >> Random.List.choose
-        >> Random.map Tuple.first
+        >> Random.map Pair.first
         >> Random.map (Result.fromMaybe "Couldn't find a destination")
 
 
@@ -738,13 +726,32 @@ update msg model =
         ( Attacking state, Clicked cell ) ->
             ( toAttacking (SM.map (\model2 -> { model2 | selectedCell = Just cell }) state), Cmd.none )
 
-        ( Attacking state, Tick posix ) ->
-            case nextMove <| untag <| state of
-                Ok battlefield ->
-                    ( toAttacking <| State <| battlefield, Cmd.none )
+        ( Attacking (State startingBattlefield), Tick posix ) ->
+            let
+                move =
+                    getCurrentTeam startingBattlefield
+                        |> Result.map (flip getTeamMembers startingBattlefield.cells)
+                        |> Result.andThen (\cells -> Random.step (randomCell cells) startingBattlefield.seed |> liftResultRandom)
+                        |> Result.andThen (\( cell, seed ) -> Random.step (randomMove cell startingBattlefield.cells) seed |> liftResultRandom)
+                        |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo pair startingBattlefield) seed |> liftResultRandom)
+                        |> Result.map (\( battlefield2, seed ) -> { battlefield2 | seed = seed })
+            in
+            case move of
+                Ok newBattlefield ->
+                    ( toAttacking <| State <| newBattlefield, Cmd.none )
 
                 Err error ->
-                    crash error
+                    ( toTurningOver <| State <| { startingBattlefield | messages = startingBattlefield.messages ++ [ error ] }, Cmd.none )
+
+        ( TurningOver (State startingBattlefield), Attack ) ->
+            let
+                newBattlefield =
+                    { startingBattlefield
+                        | teams = startingBattlefield.teams |> RollingList.roll
+                        , messages = startingBattlefield.messages ++ [ "End of turn" ]
+                    }
+            in
+            ( toAttacking <| State newBattlefield, Cmd.none )
 
         ( Ending state, New ) ->
             ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
@@ -763,6 +770,16 @@ update msg model =
 
         _ ->
             invalidMessageState
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    case model of
+        Attacking _ ->
+            Time.every 1000 Tick
+
+        _ ->
+            Sub.none
 
 
 cellWidth =
@@ -985,6 +1002,7 @@ view model =
                 TurningOver state ->
                     [ viewBattlefield state
                     , br [] []
+                    , viewAttackButton state
                     , viewNewButton state
                     , viewRestartButton state
                     , viewImportButton state
@@ -1010,16 +1028,6 @@ view model =
     { title = "Elm Grid War"
     , body = body
     }
-
-
-subscriptions : Model -> Sub Msg
-subscriptions model =
-    case model of
-        Attacking _ ->
-            Time.every 1000 Tick
-
-        _ ->
-            Sub.none
 
 
 main : Program () Model Msg
