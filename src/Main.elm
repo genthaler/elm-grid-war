@@ -465,34 +465,6 @@ invalidMessageState =
     crash "Unexpected message/state combination"
 
 
-
-{-
-   - init
-      - Update all team members with new remaining moves
-
-   - get current team
-      - if AI
-           - get random team member with remaining moves
-           - if there is one,
-                - get random cell that is in range that is on the map, has no team members on it
-                    - decrement moves remaining
-                    - if someone there
-                        - fight them (randomly)
-                            - if alive
-                                - increase XP
-                                - update new cell
-                    - else
-                        - go there
-                           - update new cell
-                    - clear previous cell of character
-            - else
-                - next team
-                  - Update all team members with new remaining moves
-      - if Human
-          later...
--}
-
-
 randomDice : Int -> Int -> Generator Bool
 randomDice max succeed =
     Random.int 1 max |> Random.map ((<=) succeed)
@@ -516,6 +488,11 @@ getTeamMembers team =
     Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False)
 
 
+allMoves : CellRef -> CellMap -> List CellRefPair
+allMoves cellRef =
+    Dict.toList >> List.map (Pair.pair cellRef)
+
+
 inRange : CellRefPair -> Bool
 inRange =
     Pair.mapBoth (Pair.second >> .hex)
@@ -533,11 +510,6 @@ sameTeam =
     Pair.mapBoth (Pair.second >> .character >> Maybe.map .team)
         >> Pair.fold (Maybe.map2 (==))
         >> Maybe.withDefault False
-
-
-allMoves : CellRef -> CellMap -> List CellRefPair
-allMoves cellRef =
-    Dict.toList >> List.map (Pair.pair cellRef)
 
 
 validMoves : CellRef -> CellMap -> List CellRefPair
@@ -727,29 +699,17 @@ update msg model =
             ( toAttacking (SM.map (\model2 -> { model2 | selectedCell = Just cell }) state), Cmd.none )
 
         ( Attacking (State startingBattlefield), Tick posix ) ->
-            let
-                move =
-                    getCurrentTeam startingBattlefield
-                        |> Result.map (flip getTeamMembers startingBattlefield.cells)
-                        |> Result.andThen (\cells -> Random.step (randomCell cells) startingBattlefield.seed |> liftResultRandom)
-                        |> Result.andThen (\( cell, seed ) -> Random.step (randomMove cell startingBattlefield.cells) seed |> liftResultRandom)
-                        |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo pair startingBattlefield) seed |> liftResultRandom)
-                        |> Result.map (\( battlefield2, seed ) -> { battlefield2 | seed = seed })
-            in
-            case move of
+            case nextMove startingBattlefield of
                 Ok newBattlefield ->
                     ( toAttacking <| State <| newBattlefield, Cmd.none )
 
                 Err error ->
-                    ( toTurningOver <| State <| { startingBattlefield | messages = startingBattlefield.messages ++ [ error ] }, Cmd.none )
+                    ( toTurningOver <| State <| { startingBattlefield | messages = error :: startingBattlefield.messages }, Cmd.none )
 
         ( TurningOver (State startingBattlefield), Attack ) ->
             let
                 newBattlefield =
-                    { startingBattlefield
-                        | teams = startingBattlefield.teams |> RollingList.roll
-                        , messages = startingBattlefield.messages ++ [ "End of turn" ]
-                    }
+                    { startingBattlefield | teams = startingBattlefield.teams |> RollingList.roll, messages = "End of turn" :: startingBattlefield.messages }
             in
             ( toAttacking <| State newBattlefield, Cmd.none )
 
@@ -944,6 +904,15 @@ viewBattlefield state =
         ]
 
 
+
+-- viewMessages State a Battlefield -> Html Msg
+
+
+viewMessages (State battlefield) =
+    Html.ul [] <|
+        List.map (\string -> Html.li [] [ text string ]) battlefield.messages
+
+
 view : Model -> Browser.Document Msg
 view model =
     let
@@ -997,6 +966,7 @@ view model =
                     , viewNewButton state
                     , viewRestartButton state
                     , viewImportButton state
+                    , viewMessages state
                     ]
 
                 TurningOver state ->
@@ -1006,6 +976,7 @@ view model =
                     , viewNewButton state
                     , viewRestartButton state
                     , viewImportButton state
+                    , viewMessages state
                     ]
 
                 Ending state ->
@@ -1014,6 +985,7 @@ view model =
                     , viewNewButton state
                     , viewRestartButton state
                     , viewImportButton state
+                    , viewMessages state
                     ]
 
                 Error state ->
