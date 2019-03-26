@@ -11,6 +11,10 @@ pair =
     Tuple.pair
 
 
+twin a =
+    Tuple.pair a a
+
+
 first =
     Tuple.first
 

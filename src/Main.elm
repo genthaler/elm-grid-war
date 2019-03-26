@@ -391,6 +391,31 @@ cellsToTeams cells =
     cells |> List.map .character |> Maybe.Extra.values |> List.map .team |> RollingList.fromList
 
 
+randomCellRef seed0 (( hash, hex ) as cellRef0) =
+    let
+        ( x, seed1 ) =
+            Random.step (Random.int 0 10) seed0
+
+        cellRef1 =
+            ( hash
+            , { terrain = Grass
+              , character =
+                    case x of
+                        0 ->
+                            Just <| Character Peasant Human 0 1
+
+                        1 ->
+                            Just <| Character Peasant AI 0 1
+
+                        _ ->
+                            Nothing
+              , hex = hex
+              }
+            )
+    in
+    ( seed1, cellRef1 )
+
+
 initBattlefield : Int -> Battlefield
 initBattlefield seedSeed =
     let
@@ -406,50 +431,21 @@ initBattlefield seedSeed =
         teamSize =
             10
 
-        initialMap : Dict Hash Hexagons.Hex.Hex
-        initialMap =
+        ( newSeed, randomCells ) =
             rectangularPointyTopMap height width
-
-        ( shuffledCells, newSeed ) =
-            initialMap
-                |> Dict.map
-                    (\( x, y, z ) v ->
-                        { terrain = Grass
-                        , character =
-                            case modBy 5 x of
-                                0 ->
-                                    Just <| Character Peasant Human 0 1
-
-                                1 ->
-                                    Just <| Character Peasant AI 0 1
-
-                                _ ->
-                                    Nothing
-                        , hex = v
-                        }
-                    )
                 |> Dict.toList
-                |> Random.List.shuffle
-                |> flip Random.step seed
-                |> Tuple.mapFirst (mergeShuffledCells initialMap)
+                |> LExtra.mapAccuml randomCellRef seed
+                |> Tuple.mapSecond Dict.fromList
     in
     { height = height
     , width = width
-    , cells = shuffledCells
+    , cells = randomCells
     , selectedCell = Nothing
-    , teams = shuffledCells |> Dict.values |> cellsToTeams
+    , teams = randomCells |> Dict.values |> cellsToTeams
     , seed = newSeed
     , initialSeedSeed = seedSeed
     , messages = []
     }
-
-
-mergeShuffledCells oldCells shuffledCells =
-    List.map2
-        (\( k, _ ) ( _, v ) -> ( k, v ))
-        (Dict.toList oldCells)
-        shuffledCells
-        |> Dict.fromList
 
 
 init : flags -> ( Model, Cmd Msg )
@@ -483,9 +479,31 @@ getCurrentTeam b =
     b.teams |> RollingList.current |> Result.fromMaybe "There's no team left!"
 
 
-getTeamMembers : Team -> Dict Hash Cell -> Dict Hash Cell
-getTeamMembers team =
-    Dict.filter (\k v -> v.character |> Maybe.map (.team >> (==) team) |> Maybe.withDefault False)
+getTeamMembersWithMoves : Team -> Dict Hash Cell -> Dict Hash Cell
+getTeamMembersWithMoves team =
+    Dict.filter
+        (\k v ->
+            v.character
+                |> Maybe.map (Bool.Extra.allPass [ .team >> (==) team, .movesLeft >> (<=) 0 ])
+                |> Maybe.withDefault False
+        )
+
+
+-- resetMovesLeft : Team -> Battlefield -> Battlefield
+-- resetMovesLeft team battlefield =
+--     { battlefield
+--         | cell = \cell -> { cell | character = Maybe.map (\character -> { character | movesLeft = character.movesLeft - 1 }) cell.character }
+--     }
+
+
+mapMovesLeft : (Int -> Int) -> CellRef -> CellRef
+mapMovesLeft f =
+    Tuple.mapSecond (\cell -> { cell | character = Maybe.map (\character -> { character | movesLeft = f character.movesLeft }) cell.character })
+
+
+decrementMovesLeft : CellRef -> CellRef
+decrementMovesLeft =
+    mapMovesLeft ((+) -1)
 
 
 allMoves : CellRef -> CellMap -> List CellRefPair
@@ -614,8 +632,9 @@ liftResultRandom ( a, b ) =
 nextMove : Battlefield -> Result String Battlefield
 nextMove battlefield =
     getCurrentTeam battlefield
-        |> Result.map (flip getTeamMembers battlefield.cells)
+        |> Result.map (flip getTeamMembersWithMoves battlefield.cells)
         |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftResultRandom)
+        |> Result.map (\( cell, seed ) -> ( decrementMovesLeft cell, seed ))
         |> Result.andThen (\( cell, seed ) -> Random.step (randomMove cell battlefield.cells) seed |> liftResultRandom)
         |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo pair battlefield) seed |> liftResultRandom)
         |> Result.map (\( battlefield2, seed ) -> { battlefield2 | seed = seed })
