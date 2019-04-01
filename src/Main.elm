@@ -489,17 +489,43 @@ getTeamMembersWithMoves team =
         )
 
 
+resetMovesLeft : Team -> Battlefield -> Battlefield
+resetMovesLeft team =
+    mapBattlefieldCells
+        << Dict.map
+        << always
+        << mapCellCharacter
+        << Maybe.map
+    <|
+        \character ->
+            { character
+                | movesLeft =
+                    if character.team == team then
+                        1
 
--- resetMovesLeft : Team -> Battlefield -> Battlefield
--- resetMovesLeft team battlefield =
---     { battlefield
---         | cell = \cell -> { cell | character = Maybe.map (\character -> { character | movesLeft = character.movesLeft - 1 }) cell.character }
---     }
+                    else
+                        character.movesLeft
+            }
+
+
+mapBattlefieldCells : (CellMap -> CellMap) -> Battlefield -> Battlefield
+mapBattlefieldCells f battlefield =
+    { battlefield | cells = f battlefield.cells }
+
+
+mapCellCharacter : (Maybe Character -> Maybe Character) -> Cell -> Cell
+mapCellCharacter f cell =
+    { cell | character = f cell.character }
+
+
+mapCharacterMovesLeft : (Int -> Int) -> Character -> Character
+mapCharacterMovesLeft f character =
+    { character | movesLeft = f character.movesLeft }
 
 
 mapMovesLeft : (Int -> Int) -> CellRef -> CellRef
-mapMovesLeft f =
-    Tuple.mapSecond (\cell -> { cell | character = Maybe.map (\character -> { character | movesLeft = f character.movesLeft }) cell.character })
+mapMovesLeft =
+    Tuple.mapSecond << mapCellCharacter << Maybe.map << mapCharacterMovesLeft
 
 
 decrementMovesLeft : CellRef -> CellRef
@@ -579,8 +605,8 @@ updateCellRefPair ( cellRef1, cellRef2 ) =
 
 
 removeFrom : CellRef -> CellRef
-removeFrom ( srcHash, srcCell ) =
-    ( srcHash, { srcCell | character = Nothing } )
+removeFrom =
+    Tuple.mapSecond << mapCellCharacter <| always Nothing
 
 
 fight : CellRefPair -> Battlefield -> Bool -> Result String Battlefield
