@@ -489,6 +489,7 @@ getTeamMembersWithMoves team =
         )
 
 
+
 -- resetMovesLeft : Team -> Battlefield -> Battlefield
 -- resetMovesLeft team battlefield =
 --     { battlefield
@@ -513,7 +514,7 @@ allMoves cellRef =
 
 inRange : CellRefPair -> Bool
 inRange =
-    Pair.mapBoth (Pair.second >> .hex)
+    Pair.map (Pair.second >> .hex)
         >> Pair.fold Hexagons.Hex.distance
         >> (>=) 1
 
@@ -525,7 +526,7 @@ sameCellRef =
 
 sameTeam : CellRefPair -> Bool
 sameTeam =
-    Pair.mapBoth (Pair.second >> .character >> Maybe.map .team)
+    Pair.map (Pair.second >> .character >> Maybe.map .team)
         >> Pair.fold (Maybe.map2 (==))
         >> Maybe.withDefault False
 

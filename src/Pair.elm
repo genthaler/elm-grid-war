@@ -1,4 +1,4 @@
-module Pair exposing (Pair, first, fold, mapBoth, mapFirst, mapSecond, pair, second)
+module Pair exposing (Pair, first, fold, map, mapFirst, mapSecond, pair, repeat, second)
 
 import Tuple exposing (..)
 
@@ -11,7 +11,7 @@ pair =
     Tuple.pair
 
 
-twin a =
+repeat a =
     Tuple.pair a a
 
 
@@ -31,7 +31,7 @@ mapSecond =
     Tuple.mapSecond
 
 
-mapBoth f =
+map f =
     Tuple.mapBoth f f
 
 
