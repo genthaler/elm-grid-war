@@ -73,11 +73,10 @@ Probably the most fun for me is the game logic, and it's the most reusable, so s
 - AI consists of random movement
 - start with turn-based gameplay
 - start with robots only
-- need a GO button & action
-- want a stream of events, so need some sort of data structure for that
-- do I want a state machine?
 - we want the game to progress at an orderly pace.
     - so we'll subscribe to a timer event for ticks to start new events
+- look up available free/pd/ccl graphics/sounds/models
+- gif/svg/webgl/css
 
 So the states are:
 - Init
@@ -86,4 +85,3 @@ So the states are:
 - Attack team
   - Circular list of teams
 - Win
-
