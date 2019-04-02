@@ -40,7 +40,8 @@ import Time
 
 
 type Msg
-    = New
+    = NoOp
+    | New
     | Restart
     | Import
     | MapJsonChanged String
@@ -317,7 +318,7 @@ decodeCharacter =
 
 encodeCharacter character =
     E.object
-        [ ( "c", encodeClass character.class )
+        [ ( "c", encodeClass character.class ) 
         , ( "t", encodeTeam character.team )
         ]
 
@@ -357,7 +358,7 @@ decodeBattlefield =
                     List.map2 (\( k1, v1 ) ( k2, v2 ) -> ( k1, Cell v2.terrain v2.character v1 )) (Dict.toList map) cells
                         |> Dict.fromList
             in
-            Battlefield h w mergedCells s (cellsToTeams c) (Random.initialSeed 1) 1 []
+            Battlefield h w mergedCells s allTeams (Random.initialSeed 1) 1 []
     in
     D.map4
         gather
@@ -386,9 +387,8 @@ base64ErrorToString error =
             "InvalidByteSequence "
 
 
-cellsToTeams : List { a | character : Maybe { b | team : Team } } -> RollingList.RollingList Team
-cellsToTeams cells =
-    cells |> List.map .character |> Maybe.Extra.values |> List.map .team |> RollingList.fromList
+allTeams =
+    RollingList.fromList [ AI, Human ]
 
 
 randomCellRef seed0 (( hash, hex ) as cellRef0) =
@@ -402,10 +402,10 @@ randomCellRef seed0 (( hash, hex ) as cellRef0) =
               , character =
                     case x of
                         0 ->
-                            Just <| Character Peasant Human 0 1
+                            Just <| Character Peasant Human 1 0
 
                         1 ->
-                            Just <| Character Peasant AI 0 1
+                            Just <| Character Peasant AI 1 0
 
                         _ ->
                             Nothing
@@ -441,7 +441,7 @@ initBattlefield seedSeed =
     , width = width
     , cells = randomCells
     , selectedCell = Nothing
-    , teams = randomCells |> Dict.values |> cellsToTeams
+    , teams = allTeams
     , seed = newSeed
     , initialSeedSeed = seedSeed
     , messages = []
@@ -484,7 +484,7 @@ getTeamMembersWithMoves team =
     Dict.filter
         (\k v ->
             v.character
-                |> Maybe.map (Bool.Extra.allPass [ .team >> (==) team, .movesLeft >> (<=) 0 ])
+                |> Maybe.map (Bool.Extra.allPass [ .team >> (==) team, .movesLeft >> (<) 0 ])
                 |> Maybe.withDefault False
         )
 
@@ -681,6 +681,11 @@ nextMove battlefield =
         |> Result.map (\( battlefield2, seed ) -> { battlefield2 | seed = seed })
 
 
+perform : msg -> Cmd msg
+perform msg =
+    Task.perform identity (Task.succeed msg)
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( model, msg ) of
@@ -764,10 +769,13 @@ update msg model =
                     ( toAttacking <| State <| newBattlefield, Cmd.none )
 
                 Err error ->
-                    ( toTurningOver <| State <| mapBattlefieldMessages ((::) error) <| startingBattlefield, Cmd.none )
+                    ( toTurningOver <| State <| mapBattlefieldMessages ((::) error) <| startingBattlefield, perform NoOp )
+
+        ( TurningOver (State startingBattlefield), NoOp ) ->
+            ( toTurningOver <| State <| resetMovesLeft <| mapBattlefieldTeams RollingList.roll <| mapBattlefieldMessages ((::) "End of turn") <| startingBattlefield, Cmd.none )
 
         ( TurningOver (State startingBattlefield), Attack ) ->
-            ( toAttacking <| State <| resetMovesLeft <| mapBattlefieldTeams RollingList.roll <| mapBattlefieldMessages ((::) "End of turn") <| startingBattlefield, Cmd.none )
+            ( toAttacking <| State <| startingBattlefield, Cmd.none )
 
         ( Ending state, New ) ->
             ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
@@ -823,13 +831,12 @@ layout =
 
 viewBoxStringCoords : String
 viewBoxStringCoords =
-    String.fromFloat (-cellWidth + cellWidth * 0.1)
-        ++ " "
-        ++ String.fromFloat -(cellHeight + 0)
-        ++ " "
-        ++ String.fromInt svgWidth
-        ++ " "
-        ++ String.fromInt svgHeight
+    String.join " "
+        [ String.fromFloat (-cellWidth + cellWidth * 0.1)
+        , String.fromFloat -(cellHeight + 0)
+        , String.fromInt svgWidth
+        , String.fromInt svgHeight
+        ]
 
 
 {-| Helper to convert points to SVG string coordinates
@@ -843,7 +850,7 @@ pointsToString points =
 -}
 pointToStringCoords : Point -> String
 pointToStringCoords ( x, y ) =
-    String.fromFloat x ++ "," ++ String.fromFloat y
+    String.join "," [ String.fromFloat x, String.fromFloat y ]
 
 
 mapPolygonCorners : Hex -> List Point
@@ -901,7 +908,7 @@ hexGrid battlefield =
                 , SvgEvents.onClick <|
                     Clicked hash
                 ]
-                []
+                [ Svg.text_ [] [ Svg.text "hello" ] ]
             ]
     in
     g
