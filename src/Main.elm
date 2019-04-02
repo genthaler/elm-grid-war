@@ -489,28 +489,42 @@ getTeamMembersWithMoves team =
         )
 
 
-resetMovesLeft : Team -> Battlefield -> Battlefield
-resetMovesLeft team =
-    mapBattlefieldCells
-        << Dict.map
-        << always
-        << mapCellCharacter
-        << Maybe.map
-    <|
-        \character ->
-            { character
-                | movesLeft =
-                    if character.team == team then
-                        1
+resetMovesLeft : Battlefield -> Battlefield
+resetMovesLeft battlefield =
+    let
+        reset =
+            mapBattlefieldCells
+                << Dict.map
+                << always
+                << mapCellCharacter
+                << Maybe.map
+            <|
+                \character ->
+                    { character
+                        | movesLeft =
+                            if character.team == (battlefield.teams |> RollingList.current |> Maybe.withDefault AI) then
+                                1
 
-                    else
-                        character.movesLeft
-            }
+                            else
+                                character.movesLeft
+                    }
+    in
+    reset battlefield
 
 
 mapBattlefieldCells : (CellMap -> CellMap) -> Battlefield -> Battlefield
 mapBattlefieldCells f battlefield =
     { battlefield | cells = f battlefield.cells }
+
+
+mapBattlefieldTeams : (RollingList.RollingList Team -> RollingList.RollingList Team) -> Battlefield -> Battlefield
+mapBattlefieldTeams f battlefield =
+    { battlefield | teams = f battlefield.teams }
+
+
+mapBattlefieldMessages : (List String -> List String) -> Battlefield -> Battlefield
+mapBattlefieldMessages f battlefield =
+    { battlefield | messages = f battlefield.messages }
 
 
 mapCellCharacter : (Maybe Character -> Maybe Character) -> Cell -> Cell
@@ -750,14 +764,10 @@ update msg model =
                     ( toAttacking <| State <| newBattlefield, Cmd.none )
 
                 Err error ->
-                    ( toTurningOver <| State <| { startingBattlefield | messages = error :: startingBattlefield.messages }, Cmd.none )
+                    ( toTurningOver <| State <| mapBattlefieldMessages ((::) error) <| startingBattlefield, Cmd.none )
 
         ( TurningOver (State startingBattlefield), Attack ) ->
-            let
-                newBattlefield =
-                    { startingBattlefield | teams = startingBattlefield.teams |> RollingList.roll, messages = "End of turn" :: startingBattlefield.messages }
-            in
-            ( toAttacking <| State newBattlefield, Cmd.none )
+            ( toAttacking <| State <| resetMovesLeft <| mapBattlefieldTeams RollingList.roll <| mapBattlefieldMessages ((::) "End of turn") <| startingBattlefield, Cmd.none )
 
         ( Ending state, New ) ->
             ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
