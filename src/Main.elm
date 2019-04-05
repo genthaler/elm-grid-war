@@ -1,7 +1,5 @@
 module Main exposing (main)
 
-import Base64.Decode as D64
-import Base64.Encode as E64
 import Basics.Extra exposing (curry, flip, uncurry)
 import Bool.Extra
 import Browser
@@ -37,6 +35,10 @@ import Svg.Events as SvgEvents
 import Svg.Lazy exposing (lazy, lazy2, lazy3)
 import Task
 import Time
+
+
+
+-- Model
 
 
 type Msg
@@ -142,49 +144,8 @@ type Model
     | Error (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { message : String })
 
 
-toInit : Model
-toInit =
-    Init <| State {}
 
-
-toGettingTimeForNewSeed : State { a | gettingTimeForNewSeed : Allowed } b -> Model
-toGettingTimeForNewSeed _ =
-    GettingTimeForNewSeed <| State {}
-
-
-toGettingSeed : State { a | gettingSeed : Allowed } { b | maybeBattlefield : Maybe Battlefield } -> Maybe Int -> Model
-toGettingSeed (State state) seedSeed =
-    GettingSeed <| State { maybeBattlefield = state.maybeBattlefield, seedSeed = seedSeed }
-
-
-toGettingMapJson : State { a | gettingMapJson : Allowed } b -> Maybe Battlefield -> String -> Maybe Battlefield -> Model
-toGettingMapJson (State state) maybeBattlefield mapJson maybeNewBattlefield =
-    GettingMapJson <| State { maybeBattlefield = maybeBattlefield, mapJson = mapJson, maybeNewBattlefield = maybeNewBattlefield }
-
-
-toWaitingForStart : State { a | waitingForStart : Allowed } b -> Battlefield -> Model
-toWaitingForStart _ battlefield =
-    WaitingForStart <| State battlefield
-
-
-toAttacking : State { a | attacking : Allowed } Battlefield -> Model
-toAttacking (State state) =
-    Attacking <| State state
-
-
-toTurningOver : State { a | turningOver : Allowed } Battlefield -> Model
-toTurningOver (State state) =
-    TurningOver <| State state
-
-
-toEnding : State { a | ending : Allowed } Battlefield -> Model
-toEnding (State state) =
-    Ending <| State state
-
-
-toError : String -> Model
-toError message =
-    Error <| State { message = message }
+-- Model Encoders/Decoders
 
 
 toStringTerrain terrain =
@@ -318,7 +279,7 @@ decodeCharacter =
 
 encodeCharacter character =
     E.object
-        [ ( "c", encodeClass character.class ) 
+        [ ( "c", encodeClass character.class )
         , ( "t", encodeTeam character.team )
         ]
 
@@ -377,14 +338,57 @@ encodeBattlefield model =
         ]
 
 
-base64ErrorToString : D64.Error -> String
-base64ErrorToString error =
-    case error of
-        D64.ValidationError ->
-            "ValidationError"
 
-        D64.InvalidByteSequence ->
-            "InvalidByteSequence "
+-- State Machine
+
+
+toInit : Model
+toInit =
+    Init <| State {}
+
+
+toGettingTimeForNewSeed : State { a | gettingTimeForNewSeed : Allowed } b -> Model
+toGettingTimeForNewSeed _ =
+    GettingTimeForNewSeed <| State {}
+
+
+toGettingSeed : State { a | gettingSeed : Allowed } { b | maybeBattlefield : Maybe Battlefield } -> Maybe Int -> Model
+toGettingSeed (State state) seedSeed =
+    GettingSeed <| State { maybeBattlefield = state.maybeBattlefield, seedSeed = seedSeed }
+
+
+toGettingMapJson : State { a | gettingMapJson : Allowed } b -> Maybe Battlefield -> String -> Maybe Battlefield -> Model
+toGettingMapJson (State state) maybeBattlefield mapJson maybeNewBattlefield =
+    GettingMapJson <| State { maybeBattlefield = maybeBattlefield, mapJson = mapJson, maybeNewBattlefield = maybeNewBattlefield }
+
+
+toWaitingForStart : State { a | waitingForStart : Allowed } b -> Battlefield -> Model
+toWaitingForStart _ battlefield =
+    WaitingForStart <| State battlefield
+
+
+toAttacking : State { a | attacking : Allowed } Battlefield -> Model
+toAttacking (State state) =
+    Attacking <| State state
+
+
+toTurningOver : State { a | turningOver : Allowed } Battlefield -> Model
+toTurningOver (State state) =
+    TurningOver <| State state
+
+
+toEnding : State { a | ending : Allowed } Battlefield -> Model
+toEnding (State state) =
+    Ending <| State state
+
+
+toError : String -> Model
+toError message =
+    Error <| State { message = message }
+
+
+
+-- Init
 
 
 allTeams =
@@ -416,29 +420,31 @@ randomCellRef seed0 (( hash, hex ) as cellRef0) =
     ( seed1, cellRef1 )
 
 
+mapHeight =
+    10
+
+
+mapWidth =
+    10
+
+
 initBattlefield : Int -> Battlefield
 initBattlefield seedSeed =
     let
         seed =
             Random.initialSeed seedSeed
 
-        height =
-            10
-
-        width =
-            10
-
         teamSize =
             10
 
         ( newSeed, randomCells ) =
-            rectangularPointyTopMap height width
+            rectangularPointyTopMap mapHeight mapWidth
                 |> Dict.toList
                 |> LExtra.mapAccuml randomCellRef seed
                 |> Tuple.mapSecond Dict.fromList
     in
-    { height = height
-    , width = width
+    { height = mapHeight
+    , width = mapWidth
     , cells = randomCells
     , selectedCell = Nothing
     , teams = allTeams
@@ -451,6 +457,10 @@ initBattlefield seedSeed =
 init : flags -> ( Model, Cmd Msg )
 init _ =
     ( toInit, Cmd.none )
+
+
+
+-- Update
 
 
 crash message =
@@ -772,7 +782,9 @@ update msg model =
                     ( toTurningOver <| State <| mapBattlefieldMessages ((::) error) <| startingBattlefield, perform NoOp )
 
         ( TurningOver (State startingBattlefield), NoOp ) ->
-            ( toTurningOver <| State <| resetMovesLeft <| mapBattlefieldTeams RollingList.roll <| mapBattlefieldMessages ((::) "End of turn") <| startingBattlefield, Cmd.none )
+            ( toTurningOver <| State <| resetMovesLeft <| mapBattlefieldTeams RollingList.roll <| mapBattlefieldMessages ((::) "End of turn") <| startingBattlefield
+            , perform Attack
+            )
 
         ( TurningOver (State startingBattlefield), Attack ) ->
             ( toAttacking <| State <| startingBattlefield, Cmd.none )
@@ -796,14 +808,22 @@ update msg model =
             invalidMessageState
 
 
+
+-- Subscriptions
+
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case model of
         Attacking _ ->
-            Time.every 1000 Tick
+            Time.every 100 Tick
 
         _ ->
             Sub.none
+
+
+
+-- View
 
 
 cellWidth =

@@ -66,22 +66,21 @@ My homage to the hex-based strategy games of yesteryear
 
 ## Tasks
 
-Probably the most fun for me is the game logic, and it's the most reusable, so start there.
-
-- only 1 class, 2 teams, no terrain (so no need for complex path finding)
-- so only need 3 colours (1 for each team + 1 for neither)
-- AI consists of random movement
-- start with turn-based gameplay
-- start with robots only
-- we want the game to progress at an orderly pace.
-    - so we'll subscribe to a timer event for ticks to start new events
 - look up available free/pd/ccl graphics/sounds/models
 - gif/svg/webgl/css
 
-So the states are:
-- Init
-  - random allocation of units
-- Wait for 
-- Attack team
-  - Circular list of teams
-- Win
+- Halt when there are no more members of a team
+- Extract current AI as a module
+- have characters move roughly in a direction i.e. record last direction, only deviate 1 off straight
+- refine message passing? or use Debug.log? Currently using Result for message passing, not really working
+- start to refine the UI, use cell select to display statuses
+
+## AI
+- Completely random (current implementation)
+- Drive in a (random) curvy line
+- Drive in a straight line and bounce off the walls
+- Neural Net
+- GAN
+- Genetic Algorithms
+- GA + NN
+- Control FLow Theory
