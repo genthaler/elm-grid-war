@@ -76,11 +76,24 @@ My homage to the hex-based strategy games of yesteryear
 - start to refine the UI, use cell select to display statuses
 
 ## AI
+### Types
 - Completely random (current implementation)
 - Drive in a (random) curvy line
 - Drive in a straight line and bounce off the walls
 - Neural Net
-- GAN
+  - GAN
 - Genetic Algorithms
 - GA + NN
-- Control FLow Theory
+- Control Flow Theory / Feedback control
+- swarming?
+- Search (i.e. suck and see)
+  - breadth-first
+  - depth-first
+  - would like to be able to keep relevant search results after a move
+### Considerations
+- GANs and Genetic Algorithms need time to learn, can't really do it in-game
+- need to be able to interrupt the search in order to pick the best in the available time, and also to permit animations.
+- how to allow genetically generated code to be interruptible?
+
+
+
