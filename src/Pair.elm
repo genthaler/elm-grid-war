@@ -37,3 +37,7 @@ map f =
 
 fold f ( a, b ) =
     f a b
+
+
+swap ( a, b ) =
+    ( b, a )

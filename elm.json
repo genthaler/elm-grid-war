@@ -39,14 +39,17 @@
             "ianmackenzie/elm-geometry-svg": "1.0.2",
             "ivadzy/bbase64": "1.1.0",
             "joneshf/elm-tagged": "2.1.1",
+            "krisajenkins/elm-astar": "2.1.3",
             "lovasoa/elm-rolling-list": "1.1.4",
             "lukewestby/elm-template": "3.0.0",
             "mdgriffith/elm-ui": "1.1.0",
             "stoeffel/elm-verify": "5.0.0",
+            "the-sett/ai-search": "4.1.1",
             "the-sett/elm-state-machines": "1.0.1",
             "the-sett/lazy-list": "1.1.1"
         },
         "indirect": {
+            "TSFoster/elm-heap": "2.1.1",
             "avh4/elm-color": "1.0.0",
             "avh4/elm-fifo": "1.0.4",
             "elm/bytes": "1.0.8",

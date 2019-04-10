@@ -68,12 +68,11 @@ My homage to the hex-based strategy games of yesteryear
 
 - look up available free/pd/ccl graphics/sounds/models
 - gif/svg/webgl/css
-
 - Halt when there are no more members of a team
 - Extract current AI as a module
-- have characters move roughly in a direction i.e. record last direction, only deviate 1 off straight
-- refine message passing? or use Debug.log? Currently using Result for message passing, not really working
-- start to refine the UI, use cell select to display statuses
+- eExtract map generation as a module.
+- Refine message passing? or use Debug.log? Currently using Result for message passing, not really working
+- Start to refine the UI, use cell select to display statuses
 
 ## AI
 ### Types
@@ -86,14 +85,14 @@ My homage to the hex-based strategy games of yesteryear
 - GA + NN
 - Control Flow Theory / Feedback control
 - swarming?
-- Search (i.e. suck and see)
+- Search (i.e. suck and see), prune, Minimax, AB-Pruning Minimax, and random agent
   - breadth-first
   - depth-first
   - would like to be able to keep relevant search results after a move
+
 ### Considerations
 - GANs and Genetic Algorithms need time to learn, can't really do it in-game
 - need to be able to interrupt the search in order to pick the best in the available time, and also to permit animations.
 - how to allow genetically generated code to be interruptible?
-
-
-
+- can have GA for longer lasting games, with waves or constantly spawning
+- although we can have a variant where there is no central intelligence, rather NPCs just randomly spawn
