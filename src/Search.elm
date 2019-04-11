@@ -118,7 +118,7 @@ alphabeta depth0 positiveInfinity negativeInfinity maximizingPlayer0 isTerminal 
                                             else
                                                 cutoff value2 alpha3 beta2 children3
                             in
-                            cutoff -2.0 alpha beta children
+                            cutoff negativeInfinity alpha beta children
 
                         else
                             let
@@ -141,6 +141,6 @@ alphabeta depth0 positiveInfinity negativeInfinity maximizingPlayer0 isTerminal 
                                             else
                                                 cutoff value2 alpha3 beta2 children3
                             in
-                            cutoff -2.0 alpha beta children
+                            cutoff negativeInfinity alpha beta children
     in
     alphabeta0 depth0 positiveInfinity negativeInfinity maximizingPlayer0 node0
