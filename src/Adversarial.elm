@@ -1,4 +1,4 @@
-module Search exposing
+module Adversarial exposing
     ( minimax
     , alphabeta
     )
@@ -34,6 +34,7 @@ import Cons
 
     minimax(origin, depth, TRUE)
     ```
+    There is a lot that could be done to reduce the amount of code here, but I think there's value in having the implementation mirror the Wikipedia pseudocode closely.
 
 -}
 minimax : Int -> Bool -> (a -> Bool) -> (a -> comparable) -> (a -> List a) -> a -> comparable
@@ -81,66 +82,68 @@ minimax depth maximizingPlayer isTerminal heuristic getChildren node =
                     break (* α cut-off *)
             return value
     ```
-    alphabeta(origin, depth, −∞, +∞, TRUE)
+    `alphabeta(origin, depth, −∞, +∞, TRUE)`
+
+    There is a lot that could be done to reduce the amount of code here, but I think there's value in having the implementation mirror the Wikipedia pseudocode closely.
 
 -}
-alphabeta : Int -> comparable -> comparable -> Bool -> (a -> Bool) -> (a -> comparable) -> (a -> List a) -> a -> comparable
-alphabeta depth0 positiveInfinity negativeInfinity maximizingPlayer0 isTerminal heuristic getChildren node0 =
+alphabeta : Int -> comparable -> comparable -> Bool -> (a -> comparable) -> (a -> List a) -> a -> comparable
+alphabeta depth positiveInfinity negativeInfinity maximizingPlayer heuristic getChildren node =
     let
-        alphabeta0 depth alpha beta maximizingPlayer node =
-            if depth == 0 then
-                heuristic node
+        alphabeta0 depth0 alpha0 beta0 maximizingPlayer0 node0 =
+            if depth0 == 0 then
+                heuristic node0
 
             else
-                case getChildren node of
+                case getChildren node0 of
                     [] ->
-                        heuristic node
+                        heuristic node0
 
-                    children ->
-                        if maximizingPlayer then
+                    children0 ->
+                        if maximizingPlayer0 then
                             let
-                                cutoff value alpha2 beta2 children2 =
-                                    case children2 of
+                                cutoff value alpha1 beta1 children1 =
+                                    case children1 of
                                         [] ->
                                             value
 
-                                        child :: children3 ->
+                                        child :: children2 ->
                                             let
                                                 value2 =
-                                                    Basics.max value (alphabeta0 (depth - 1) alpha2 beta2 (not maximizingPlayer) child)
+                                                    Basics.max value (alphabeta0 (depth - 1) alpha1 beta1 (not maximizingPlayer0) child)
 
-                                                alpha3 =
-                                                    Basics.max value2 alpha2
+                                                alpha2 =
+                                                    Basics.max value2 alpha1
                                             in
-                                            if alpha3 >= beta2 then
+                                            if alpha2 >= beta1 then
                                                 value2
 
                                             else
-                                                cutoff value2 alpha3 beta2 children3
+                                                cutoff value2 alpha2 beta1 children2
                             in
-                            cutoff negativeInfinity alpha beta children
+                            cutoff negativeInfinity alpha0 beta0 children0
 
                         else
                             let
-                                cutoff value alpha2 beta2 children2 =
-                                    case children2 of
+                                cutoff value alpha1 beta1 children1 =
+                                    case children1 of
                                         [] ->
                                             value
 
-                                        child :: children3 ->
+                                        child :: children2 ->
                                             let
                                                 value2 =
-                                                    Basics.max value (alphabeta0 (depth - 1) alpha2 beta2 (not maximizingPlayer) child)
+                                                    Basics.max value (alphabeta0 (depth - 1) alpha1 beta1 (not maximizingPlayer) child)
 
-                                                alpha3 =
-                                                    Basics.max value2 alpha2
-                                            in
-                                            if alpha3 >= beta2 then
+                                                beta2 =
+                                                    Basics.max value2 beta1
+                                            in 
+                                            if alpha1 >= beta2 then
                                                 value2
 
                                             else
-                                                cutoff value2 alpha3 beta2 children3
+                                                cutoff value2 alpha1 beta2 children2
                             in
-                            cutoff negativeInfinity alpha beta children
+                            cutoff positiveInfinity alpha0 beta0 children0
     in
-    alphabeta0 depth0 positiveInfinity negativeInfinity maximizingPlayer0 node0
+    alphabeta0 depth positiveInfinity negativeInfinity maximizingPlayer node
