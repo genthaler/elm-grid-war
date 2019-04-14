@@ -1,5 +1,14 @@
 module Main exposing (main)
 
+{-| The entrypoint to elm-grid-war.
+
+
+# Main
+
+@docs main
+
+-}
+
 import Basics.Extra exposing (curry, flip, uncurry)
 import Bool.Extra
 import Browser
@@ -988,7 +997,7 @@ viewBattlefield state =
 
 
 
--- viewMessages State a Battlefield -> Html Msg
+-- Need to fix this viewMessages State a Battlefield -> Html Msg
 
 
 viewMessages (State battlefield) =
@@ -1084,7 +1093,8 @@ view model =
     , body = body
     }
 
-
+{-| This is the entry point.
+-}
 main : Program () Model Msg
 main =
     Browser.document

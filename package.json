@@ -8,7 +8,7 @@
     "test": "tests"
   },
   "scripts": {
-    "pretest": "elm-xref src/Main.elm && elm-docstyle src",
+    "pretest": "elm-xref src/Main.elm && elm-docstyle --config_path=elm-docstyle.json --verbose src",
     "test": "elm-test && elm-doctest",
     "posttest": "elm-coverage",
     "start": "parcel index.html",

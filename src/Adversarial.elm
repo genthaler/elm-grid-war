@@ -3,19 +3,27 @@ module Adversarial exposing
     , alphabeta
     )
 
-{-|
+{-| This module implements some classic adversarial search algorithms.
 
 
 # Adversarial search strategies
 
-@docs minimax, alphaBeta
+@docs minimax, alphabeta
 
 -}
 
 import Cons
 
 
-{-|
+{-| This function implements the [minimax algorithm](https://en.wikipedia.org/wiki/Minimax).
+
+  - ´depth´ -- how deep to search from this node;
+  - `maximizingPlayer` -- whose point of view we're searching from;
+  - `heuristic` -- a function that returns an approximate value of the current position;
+  - `getChildren` -- a function that generates valid positions from the current position;
+  - `node` -- the current position.
+
+    minimax depth maximizingPlayer heuristic getChildren node
 
     ```
     function minimax(node, depth, maximizingPlayer) is
@@ -37,13 +45,13 @@ import Cons
     There is a lot that could be done to reduce the amount of code here, but I think there's value in having the implementation mirror the Wikipedia pseudocode closely.
 
 -}
-minimax : Int -> Bool -> (a -> Bool) -> (a -> comparable) -> (a -> List a) -> a -> comparable
-minimax depth maximizingPlayer isTerminal heuristic getChildren node =
+minimax : Int -> Bool -> (a -> comparable) -> (a -> List a) -> a -> comparable
+minimax depth maximizingPlayer heuristic getChildren node =
     if depth == 0 then
         heuristic node
 
     else if maximizingPlayer then
-        case List.maximum <| List.map (minimax (depth - 1) (not maximizingPlayer) isTerminal heuristic getChildren) (getChildren node) of
+        case List.maximum <| List.map (minimax (depth - 1) (not maximizingPlayer) heuristic getChildren) (getChildren node) of
             Nothing ->
                 heuristic node
 
@@ -51,7 +59,7 @@ minimax depth maximizingPlayer isTerminal heuristic getChildren node =
                 max
 
     else
-        case List.minimum <| List.map (minimax (depth - 1) (not maximizingPlayer) isTerminal heuristic getChildren) (getChildren node) of
+        case List.minimum <| List.map (minimax (depth - 1) (not maximizingPlayer) heuristic getChildren) (getChildren node) of
             Nothing ->
                 heuristic node
 
@@ -59,7 +67,9 @@ minimax depth maximizingPlayer isTerminal heuristic getChildren node =
                 max
 
 
-{-|
+{-| This function implements the [minimax algorithm with alpha-beta pruning](https://en.wikipedia.org/wiki/Alpha%E2%80%93beta_pruning).
+
+    alphabeta depth positiveInfinity negativeInfinity maximizingPlayer heuristic getChildren node =
 
     ```
     function alphabeta(node, depth, α, β, maximizingPlayer) is
