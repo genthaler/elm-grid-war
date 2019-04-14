@@ -1,11 +1,20 @@
 module Main exposing (main)
 
-import Base64.Decode as D64
-import Base64.Encode as E64
-import Basics.Extra
+{-| The entrypoint to elm-grid-war.
+
+
+# Main
+
+@docs main
+
+-}
+
+import Basics.Extra exposing (curry, flip, uncurry)
+import Bool.Extra
 import Browser
 import Debug
 import Dict exposing (Dict)
+import Dict.Extra
 import Hexagons.Hex exposing (Direction(..), Hex)
 import Hexagons.Layout exposing (Point, orientationLayoutPointy, polygonCorners)
 import Hexagons.Map exposing (Hash, Map, rectangularPointyTopMap)
@@ -18,10 +27,12 @@ import Json.Encode as E
 import Json.Encode.Extra as EExtra
 import List.Extra as LExtra
 import Maybe exposing (Maybe(..))
-import Maybe.Extra as MExtra
+import Maybe.Extra
+import Pair
 import Platform
 import Platform.Sub
-import Random
+import Random exposing (Generator, Seed)
+import Random.Dict
 import Random.List
 import Result.Extra as RExtra
 import RollingList
@@ -35,8 +46,13 @@ import Task
 import Time
 
 
+
+-- Model
+
+
 type Msg
-    = New
+    = NoOp
+    | New
     | Restart
     | Import
     | MapJsonChanged String
@@ -45,160 +61,7 @@ type Msg
     | Tick Time.Posix
     | Attack
     | Clicked Hash
-
-
-
-{-
-   Construct initial UI, new game/saved game/restart game (saved seed)
-   If new game,
-   - Get new seed
-   - shuffle new map,
-   - animate constructing map
-   If restart game
-   - enter seed (prefill with seed if available)
-   - go
-   - shuffle map with seed
-   - animate
-   If saved game,
-   - Get saved map JSON
-   - Go
-   - Parse JSON into map
-
-   - Display map
-
-   - Start game
-   - For each Team
-       - if AI
-           - for each Character in Team
-               - find all valid directions to move
-               - get random direction
-               - if someone there
-                   - fight them
-               - else
-                   go there
-        - if Human
-            later...
--}
-
-
-type Model
-    = Init (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } {})
-    | GettingTimeForNewSeed (State { waitingForStart : Allowed } {})
-    | GettingSeed (State { gettingSeed : Allowed, waitingForStart : Allowed } { maybeBattlefield : Maybe Battlefield, seedSeed : Maybe Int })
-    | GettingMapJson (State { waitingForStart : Allowed } { maybeBattlefield : Maybe Battlefield, mapJson : String, maybeNewBattlefield : Maybe Battlefield })
-    | WaitingForStart (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, attacking : Allowed } Battlefield)
-    | Attacking (State { attacking : Allowed, gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, ending : Allowed } Battlefield)
-    | Ending (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } Battlefield)
-    | Error (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { message : String })
-
-
-toInit : Model
-toInit =
-    Init <| State {}
-
-
-toGettingTimeForNewSeed : State { a | gettingTimeForNewSeed : Allowed } b -> Model
-toGettingTimeForNewSeed _ =
-    GettingTimeForNewSeed <| State {}
-
-
-toGettingSeed : State { a | gettingSeed : Allowed } { b | maybeBattlefield : Maybe Battlefield } -> Maybe Int -> Model
-toGettingSeed (State state) seedSeed =
-    GettingSeed <| State { maybeBattlefield = state.maybeBattlefield, seedSeed = seedSeed }
-
-
-toGettingMapJson : State { a | gettingMapJson : Allowed } b -> Maybe Battlefield -> String -> Maybe Battlefield -> Model
-toGettingMapJson (State state) maybeBattlefield mapJson maybeNewBattlefield =
-    GettingMapJson <| State { maybeBattlefield = maybeBattlefield, mapJson = mapJson, maybeNewBattlefield = maybeNewBattlefield }
-
-
-toWaitingForStart : State { a | waitingForStart : Allowed } b -> Battlefield -> Model
-toWaitingForStart _ battlefield =
-    WaitingForStart <| State battlefield
-
-
-toAttacking : State { a | attacking : Allowed } Battlefield -> Model
-toAttacking (State state) =
-    Attacking <| State state
-
-
-toEnding : State { a | ending : Allowed } Battlefield -> Model
-toEnding (State state) =
-    Ending <| State state
-
-
-toError : String -> Model
-toError message =
-    Error <| State { message = message }
-
-
-type alias MoveState =
-    { hash : Hash, movesLeft : Int }
-
-
-type alias Battlefield =
-    { map : Map
-    , height : Int
-    , width : Int
-    , cells : Dict Hash Cell
-    , selectedCell : Maybe Hash
-    , teams : RollingList.RollingList Team
-    , seed : Random.Seed
-    , initialSeedSeed : Int
-    }
-
-
-directions =
-    [ NE, E, SE, SW, W, NW ]
-
-
-decodeBattlefield : D.Decoder Battlefield
-decodeBattlefield =
-    let
-        gather c s h w =
-            let
-                map =
-                    rectangularPointyTopMap h w
-
-                cells =
-                    Dict.fromList <| List.map2 Tuple.pair (Dict.keys map) c
-            in
-            Battlefield map h w cells s (cellsToTeams c) (Random.initialSeed 1) 1
-    in
-    D.map4
-        gather
-        (D.field "c" <| D.list decodeCell)
-        (D.field "s" <| D.maybe decodeHash)
-        (D.field "h" D.int)
-        (D.field "w" D.int)
-
-
-encodeBattlefield model =
-    E.object
-        [ ( "c", E.list encodeCell <| Dict.values model.cells )
-        , ( "s", EExtra.maybe encodeHash model.selectedCell )
-        , ( "h", E.int model.height )
-        , ( "w", E.int model.width )
-        ]
-
-
-type alias Cell =
-    { terrain : Terrain
-    , character : Maybe Character
-    }
-
-
-decodeCell =
-    D.map2 Cell
-        (D.field "t" decodeTerrain)
-        (D.field "c" <| D.maybe decodeCharacter)
-
-
-encodeCell cell =
-    E.object
-        [ ( "t", encodeTerrain cell.terrain )
-        , ( "c", EExtra.maybe encodeCharacter cell.character )
-        ]
+    | Cancel
 
 
 type Terrain
@@ -207,6 +70,91 @@ type Terrain
     | Mountain
     | Water
     | Forest
+
+
+type Class
+    = Peasant
+
+
+
+-- | Soldier
+-- | Archer
+-- | Knight
+-- | Sapper
+-- | Squire
+-- | Dog
+-- | Catapult
+-- | Castle
+
+
+type Team
+    = Human
+    | AI
+
+
+type alias Character =
+    { class : Class
+    , team : Team
+    , movesLeft : Int
+    , experience : Int
+    }
+
+
+type alias SemiCell =
+    { terrain : Terrain
+    , character : Maybe Character
+    }
+
+
+type alias Cell =
+    { terrain : Terrain
+    , character : Maybe Character
+    , hex : Hex
+    }
+
+
+type alias CellMap =
+    Dict Hash Cell
+
+
+type alias CellRef =
+    ( Hash, Cell )
+
+
+type alias CellRefPair =
+    ( CellRef, CellRef )
+
+
+type alias Battlefield =
+    { height : Int
+    , width : Int
+    , cells : CellMap
+    , selectedCell : Maybe Hash
+    , teams : RollingList.RollingList Team
+    , seed : Seed
+    , initialSeedSeed : Int
+    , messages : List String
+    }
+
+
+directions =
+    [ NE, E, SE, SW, W, NW ]
+
+
+type Model
+    = Init (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } {})
+    | GettingTimeForNewSeed (State { waitingForStart : Allowed } {})
+    | GettingSeed (State { gettingSeed : Allowed, waitingForStart : Allowed } { maybeBattlefield : Maybe Battlefield, seedSeed : Maybe Int })
+    | GettingMapJson (State { waitingForStart : Allowed } { maybeBattlefield : Maybe Battlefield, mapJson : String, maybeNewBattlefield : Maybe Battlefield })
+    | WaitingForStart (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, attacking : Allowed } Battlefield)
+    | Attacking (State { attacking : Allowed, gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed, turningOver : Allowed, ending : Allowed } Battlefield)
+    | TurningOver (State { attacking : Allowed, gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } Battlefield)
+    | Ending (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } Battlefield)
+    | Error (State { gettingTimeForNewSeed : Allowed, gettingSeed : Allowed, gettingMapJson : Allowed } { message : String })
+
+
+
+-- Model Encoders/Decoders
 
 
 toStringTerrain terrain =
@@ -256,40 +204,6 @@ encodeTerrain =
     E.string << toStringTerrain
 
 
-type alias Character =
-    { class : Class
-    , team : Team
-    }
-
-
-decodeCharacter =
-    D.map2 Character
-        (D.field "c" decodeClass)
-        (D.field "t" decodeTeam)
-
-
-encodeCharacter character =
-    E.object
-        [ ( "c", encodeClass character.class )
-        , ( "t", encodeTeam character.team )
-        ]
-
-
-type Class
-    = Peasant
-
-
-
--- | Soldier
--- | Archer
--- | Knight
--- | Sapper
--- | Squire
--- | Dog
--- | Catapult
--- | Castle
-
-
 toStringClass class =
     case class of
         Peasant ->
@@ -312,11 +226,6 @@ decodeClass =
 
 encodeClass =
     E.string << toStringClass
-
-
-type Team
-    = Human
-    | AI
 
 
 toStringTeam team =
@@ -369,15 +278,163 @@ encodeHash ( a, b, c ) =
     E.list E.int [ a, b, c ]
 
 
+decodeCharacter =
+    D.map4 Character
+        (D.field "c" decodeClass)
+        (D.field "t" decodeTeam)
+        (D.succeed 0)
+        (D.succeed 1)
+
+
+encodeCharacter character =
+    E.object
+        [ ( "c", encodeClass character.class )
+        , ( "t", encodeTeam character.team )
+        ]
+
+
+decodeCell =
+    D.map2 SemiCell
+        (D.field "t" decodeTerrain)
+        (D.field "c" <| D.maybe decodeCharacter)
+
+
+encodeCell cell =
+    E.object
+        [ ( "t", encodeTerrain cell.terrain )
+        , ( "c", EExtra.maybe encodeCharacter cell.character )
+        ]
+
+
 decodeMap =
     D.map2 rectangularPointyTopMap
         (D.field "height" D.int)
         (D.field "width" D.int)
 
 
-cellsToTeams : List Cell -> RollingList.RollingList Team
-cellsToTeams cells =
-    cells |> List.map .character |> MExtra.values |> List.map .team |> RollingList.fromList
+decodeBattlefield : D.Decoder Battlefield
+decodeBattlefield =
+    let
+        gather : List SemiCell -> Maybe Hash -> Int -> Int -> Battlefield
+        gather c s h w =
+            let
+                map =
+                    rectangularPointyTopMap h w
+
+                cells =
+                    List.map2 Tuple.pair (Dict.keys map) c
+
+                mergedCells =
+                    List.map2 (\( k1, v1 ) ( k2, v2 ) -> ( k1, Cell v2.terrain v2.character v1 )) (Dict.toList map) cells
+                        |> Dict.fromList
+            in
+            Battlefield h w mergedCells s allTeams (Random.initialSeed 1) 1 []
+    in
+    D.map4
+        gather
+        (D.field "c" <| D.list decodeCell)
+        (D.field "s" <| D.maybe decodeHash)
+        (D.field "h" D.int)
+        (D.field "w" D.int)
+
+
+encodeBattlefield model =
+    E.object
+        [ ( "c", E.list encodeCell <| Dict.values model.cells )
+        , ( "s", EExtra.maybe encodeHash model.selectedCell )
+        , ( "h", E.int model.height )
+        , ( "w", E.int model.width )
+        ]
+
+
+
+-- State Machine
+
+
+toInit : Model
+toInit =
+    Init <| State {}
+
+
+toGettingTimeForNewSeed : State { a | gettingTimeForNewSeed : Allowed } b -> Model
+toGettingTimeForNewSeed _ =
+    GettingTimeForNewSeed <| State {}
+
+
+toGettingSeed : State { a | gettingSeed : Allowed } { b | maybeBattlefield : Maybe Battlefield } -> Maybe Int -> Model
+toGettingSeed (State state) seedSeed =
+    GettingSeed <| State { maybeBattlefield = state.maybeBattlefield, seedSeed = seedSeed }
+
+
+toGettingMapJson : State { a | gettingMapJson : Allowed } b -> Maybe Battlefield -> String -> Maybe Battlefield -> Model
+toGettingMapJson (State state) maybeBattlefield mapJson maybeNewBattlefield =
+    GettingMapJson <| State { maybeBattlefield = maybeBattlefield, mapJson = mapJson, maybeNewBattlefield = maybeNewBattlefield }
+
+
+toWaitingForStart : State { a | waitingForStart : Allowed } b -> Battlefield -> Model
+toWaitingForStart _ battlefield =
+    WaitingForStart <| State battlefield
+
+
+toAttacking : State { a | attacking : Allowed } Battlefield -> Model
+toAttacking (State state) =
+    Attacking <| State state
+
+
+toTurningOver : State { a | turningOver : Allowed } Battlefield -> Model
+toTurningOver (State state) =
+    TurningOver <| State state
+
+
+toEnding : State { a | ending : Allowed } Battlefield -> Model
+toEnding (State state) =
+    Ending <| State state
+
+
+toError : String -> Model
+toError message =
+    Error <| State { message = message }
+
+
+
+-- Init
+
+
+allTeams =
+    RollingList.fromList [ AI, Human ]
+
+
+randomCellRef seed0 (( hash, hex ) as cellRef0) =
+    let
+        ( x, seed1 ) =
+            Random.step (Random.int 0 10) seed0
+
+        cellRef1 =
+            ( hash
+            , { terrain = Grass
+              , character =
+                    case x of
+                        0 ->
+                            Just <| Character Peasant Human 1 0
+
+                        1 ->
+                            Just <| Character Peasant AI 1 0
+
+                        _ ->
+                            Nothing
+              , hex = hex
+              }
+            )
+    in
+    ( seed1, cellRef1 )
+
+
+mapHeight =
+    10
+
+
+mapWidth =
+    10
 
 
 initBattlefield : Int -> Battlefield
@@ -386,64 +443,24 @@ initBattlefield seedSeed =
         seed =
             Random.initialSeed seedSeed
 
-        height =
-            10
-
-        width =
-            10
-
         teamSize =
             10
 
-        initialMap : Dict Hash Hexagons.Hex.Hex
-        initialMap =
-            rectangularPointyTopMap height width
-
-        ( shuffledCells, newSeed ) =
-            initialMap
-                |> Dict.map
-                    (\( x, y, z ) v ->
-                        { terrain = Grass
-                        , character =
-                            case modBy 5 x of
-                                0 ->
-                                    Just
-                                        { class = Peasant
-                                        , team = Human
-                                        }
-
-                                1 ->
-                                    Just
-                                        { class = Peasant
-                                        , team = AI
-                                        }
-
-                                _ ->
-                                    Nothing
-                        }
-                    )
+        ( newSeed, randomCells ) =
+            rectangularPointyTopMap mapHeight mapWidth
                 |> Dict.toList
-                |> Random.List.shuffle
-                |> Basics.Extra.flip Random.step seed
-                |> Tuple.mapFirst (mergeShuffledCells initialMap)
+                |> LExtra.mapAccuml randomCellRef seed
+                |> Tuple.mapSecond Dict.fromList
     in
-    { map = initialMap
-    , height = height
-    , width = width
-    , cells = shuffledCells
+    { height = mapHeight
+    , width = mapWidth
+    , cells = randomCells
     , selectedCell = Nothing
-    , teams = shuffledCells |> Dict.values |> cellsToTeams
+    , teams = allTeams
     , seed = newSeed
     , initialSeedSeed = seedSeed
+    , messages = []
     }
-
-
-mergeShuffledCells oldCells shuffledCells =
-    List.map2
-        (\( k, _ ) ( _, v ) -> ( k, v ))
-        (Dict.toList oldCells)
-        shuffledCells
-        |> Dict.fromList
 
 
 init : flags -> ( Model, Cmd Msg )
@@ -451,8 +468,241 @@ init _ =
     ( toInit, Cmd.none )
 
 
-crash =
-    ( toError "Unexpected message/state combination", Cmd.none )
+
+-- Update
+
+
+crash message =
+    ( toError message, Cmd.none )
+
+
+invalidMessageState =
+    crash "Unexpected message/state combination"
+
+
+randomDice : Int -> Int -> Generator Bool
+randomDice max succeed =
+    Random.int 1 max |> Random.map ((<=) succeed)
+
+
+randomCell : CellMap -> Generator (Result String CellRef)
+randomCell =
+    Dict.toList
+        >> Random.List.choose
+        >> Random.map Tuple.first
+        >> Random.map (Result.fromMaybe "Couldn't find a fighter")
+
+
+getCurrentTeam : Battlefield -> Result String Team
+getCurrentTeam b =
+    b.teams |> RollingList.current |> Result.fromMaybe "There's no team left!"
+
+
+getTeamMembersWithMoves : Team -> Dict Hash Cell -> Dict Hash Cell
+getTeamMembersWithMoves team =
+    Dict.filter
+        (\k v ->
+            v.character
+                |> Maybe.map (Bool.Extra.allPass [ .team >> (==) team, .movesLeft >> (<) 0 ])
+                |> Maybe.withDefault False
+        )
+
+
+resetMovesLeft : Battlefield -> Battlefield
+resetMovesLeft battlefield =
+    let
+        reset =
+            mapBattlefieldCells
+                << Dict.map
+                << always
+                << mapCellCharacter
+                << Maybe.map
+            <|
+                \character ->
+                    { character
+                        | movesLeft =
+                            if character.team == (battlefield.teams |> RollingList.current |> Maybe.withDefault AI) then
+                                1
+
+                            else
+                                character.movesLeft
+                    }
+    in
+    reset battlefield
+
+
+mapBattlefieldCells : (CellMap -> CellMap) -> Battlefield -> Battlefield
+mapBattlefieldCells f battlefield =
+    { battlefield | cells = f battlefield.cells }
+
+
+mapBattlefieldTeams : (RollingList.RollingList Team -> RollingList.RollingList Team) -> Battlefield -> Battlefield
+mapBattlefieldTeams f battlefield =
+    { battlefield | teams = f battlefield.teams }
+
+
+mapBattlefieldMessages : (List String -> List String) -> Battlefield -> Battlefield
+mapBattlefieldMessages f battlefield =
+    { battlefield | messages = f battlefield.messages }
+
+
+mapCellCharacter : (Maybe Character -> Maybe Character) -> Cell -> Cell
+mapCellCharacter f cell =
+    { cell | character = f cell.character }
+
+
+mapCharacterMovesLeft : (Int -> Int) -> Character -> Character
+mapCharacterMovesLeft f character =
+    { character | movesLeft = f character.movesLeft }
+
+
+mapMovesLeft : (Int -> Int) -> CellRef -> CellRef
+mapMovesLeft =
+    Tuple.mapSecond << mapCellCharacter << Maybe.map << mapCharacterMovesLeft
+
+
+decrementMovesLeft : CellRef -> CellRef
+decrementMovesLeft =
+    mapMovesLeft ((+) -1)
+
+
+allMoves : CellRef -> CellMap -> List CellRefPair
+allMoves cellRef =
+    Dict.toList >> List.map (Pair.pair cellRef)
+
+
+inRange : CellRefPair -> Bool
+inRange =
+    Pair.map (Pair.second >> .hex)
+        >> Pair.fold Hexagons.Hex.distance
+        >> (>=) 1
+
+
+sameCellRef : CellRefPair -> Bool
+sameCellRef =
+    Pair.fold (==)
+
+
+sameTeam : CellRefPair -> Bool
+sameTeam =
+    Pair.map (Pair.second >> .character >> Maybe.map .team)
+        >> Pair.fold (Maybe.map2 (==))
+        >> Maybe.withDefault False
+
+
+validMoves : CellRef -> CellMap -> List CellRefPair
+validMoves cellRef =
+    allMoves cellRef >> List.filter (Bool.Extra.allPass [ not << sameCellRef, not << sameTeam, inRange ])
+
+
+randomMove : CellRef -> CellMap -> Generator (Result String CellRefPair)
+randomMove (( hash, cell ) as cellRef) =
+    validMoves cellRef
+        >> Random.List.choose
+        >> Random.map Pair.first
+        >> Random.map (Result.fromMaybe "Couldn't find a destination")
+
+
+moveTo : CellRefPair -> CellRefPair
+moveTo ( ( srcHash, srcCell ), ( destHash, destCell ) ) =
+    ( ( srcHash, { srcCell | character = Nothing } )
+    , ( destHash, { destCell | character = srcCell.character } )
+    )
+
+
+subsume : CellRefPair -> CellRefPair
+subsume ( ( srcHash, srcCell ), ( destHash, destCell ) ) =
+    ( ( srcHash, { srcCell | character = Nothing } )
+    , ( destHash
+      , { destCell
+            | character =
+                destCell.character
+                    |> Maybe.map2
+                        (\srcCharacter destCharacter ->
+                            { destCharacter | experience = destCharacter.experience + srcCharacter.experience }
+                        )
+                        srcCell.character
+        }
+      )
+    )
+
+
+updateCellRef : CellRef -> Battlefield -> Battlefield
+updateCellRef (( hash, cell ) as cellRef) battlefield =
+    { battlefield | cells = Dict.insert hash cell battlefield.cells }
+
+
+updateCellRefPair : CellRefPair -> Battlefield -> Battlefield
+updateCellRefPair ( cellRef1, cellRef2 ) =
+    updateCellRef cellRef1 >> updateCellRef cellRef2
+
+
+removeFrom : CellRef -> CellRef
+removeFrom =
+    Tuple.mapSecond << mapCellCharacter <| always Nothing
+
+
+fight : CellRefPair -> Battlefield -> Bool -> Result String Battlefield
+fight ( srcRef, destRef ) battlefield win =
+    battlefield
+        |> (if win then
+                updateCellRefPair (subsume ( srcRef, destRef ))
+
+            else
+                updateCellRef (removeFrom srcRef)
+           )
+        |> Ok
+
+
+randomFight : CellRefPair -> Battlefield -> Generator (Result String Battlefield)
+randomFight ( srcRef, destRef ) battlefield =
+    randomDice 2 1
+        |> Random.map (fight ( srcRef, destRef ) battlefield)
+
+
+randomGo : CellRefPair -> Battlefield -> Generator (Result String Battlefield)
+randomGo pair =
+    Random.constant << Ok << updateCellRefPair (moveTo pair)
+
+
+randomFightOrGo : CellRefPair -> Battlefield -> Generator (Result String Battlefield)
+randomFightOrGo ( ( _, src ) as srcRef, ( _, dest ) as destRef ) =
+    case ( src.character, dest.character ) of
+        ( Just srcTeam, Just destTeam ) ->
+            if srcTeam /= destTeam then
+                randomFight ( srcRef, destRef )
+
+            else
+                Random.constant << always (Err "We're trying to fight a team mate, shouldn't have happened")
+
+        _ ->
+            randomGo ( srcRef, destRef )
+
+
+liftRandomMaybe : x -> ( Maybe a, b ) -> Result x ( a, b )
+liftRandomMaybe x ( a, b ) =
+    Maybe.map (flip Tuple.pair b) a |> Result.fromMaybe x
+
+
+liftResultRandom : ( Result x a, b ) -> Result x ( a, b )
+liftResultRandom ( a, b ) =
+    Result.map (flip Tuple.pair b) a
+
+
+nextMove : Battlefield -> Result String Battlefield
+nextMove battlefield =
+    getCurrentTeam battlefield
+        |> Result.map (flip getTeamMembersWithMoves battlefield.cells)
+        |> Result.andThen (\cells -> Random.step (randomCell cells) battlefield.seed |> liftResultRandom)
+        |> Result.map (\( cell, seed ) -> ( decrementMovesLeft cell, seed ))
+        |> Result.andThen (\( cell, seed ) -> Random.step (randomMove cell battlefield.cells) seed |> liftResultRandom)
+        |> Result.andThen (\( pair, seed ) -> Random.step (randomFightOrGo pair battlefield) seed |> liftResultRandom)
+        |> Result.map (\( battlefield2, seed ) -> { battlefield2 | seed = seed })
+
+
+perform : msg -> Cmd msg
+perform msg =
+    Task.perform identity (Task.succeed msg)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -479,7 +729,7 @@ update msg model =
                     ( toWaitingForStart state <| initBattlefield <| seedSeed, Cmd.none )
 
                 Nothing ->
-                    crash
+                    invalidMessageState
 
         ( GettingMapJson (State state), MapJsonChanged mapJson ) ->
             case mapJson |> D.decodeString decodeBattlefield |> Result.mapError D.errorToString of
@@ -495,7 +745,15 @@ update msg model =
                     ( toWaitingForStart state newBattlefield, Cmd.none )
 
                 Nothing ->
-                    crash
+                    invalidMessageState
+
+        ( GettingMapJson state, Cancel ) ->
+            case state |> untag |> .maybeBattlefield of
+                Just battlefield ->
+                    ( toWaitingForStart state battlefield, Cmd.none )
+
+                Nothing ->
+                    ( toInit, Cmd.none )
 
         ( WaitingForStart state, New ) ->
             ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
@@ -506,8 +764,39 @@ update msg model =
         ( WaitingForStart state, Import ) ->
             ( toGettingMapJson state (state |> untag |> Just) (state |> untag |> encodeBattlefield |> E.encode 2) (state |> untag |> Just), Cmd.none )
 
+        ( WaitingForStart state, Attack ) ->
+            ( toAttacking state, Cmd.none )
+
+        ( WaitingForStart state, Clicked cell ) ->
+            ( model, Cmd.none )
+
+        ( Attacking state, New ) ->
+            ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
+
+        ( Attacking state, Restart ) ->
+            ( toGettingSeed (State { maybeBattlefield = state |> untag |> Just }) (state |> untag |> .initialSeedSeed |> Just), Cmd.none )
+
+        ( Attacking state, Import ) ->
+            ( toGettingMapJson state (state |> untag |> Just) (state |> untag |> encodeBattlefield |> E.encode 2) (state |> untag |> Just), Cmd.none )
+
         ( Attacking state, Clicked cell ) ->
             ( toAttacking (SM.map (\model2 -> { model2 | selectedCell = Just cell }) state), Cmd.none )
+
+        ( Attacking (State startingBattlefield), Tick posix ) ->
+            case nextMove startingBattlefield of
+                Ok newBattlefield ->
+                    ( toAttacking <| State <| newBattlefield, Cmd.none )
+
+                Err error ->
+                    ( toTurningOver <| State <| mapBattlefieldMessages ((::) error) <| startingBattlefield, perform NoOp )
+
+        ( TurningOver (State startingBattlefield), NoOp ) ->
+            ( toTurningOver <| State <| resetMovesLeft <| mapBattlefieldTeams RollingList.roll <| mapBattlefieldMessages ((::) "End of turn") <| startingBattlefield
+            , perform Attack
+            )
+
+        ( TurningOver (State startingBattlefield), Attack ) ->
+            ( toAttacking <| State <| startingBattlefield, Cmd.none )
 
         ( Ending state, New ) ->
             ( toGettingTimeForNewSeed state, Task.perform Tick Time.now )
@@ -525,17 +814,25 @@ update msg model =
             ( toGettingSeed (State { maybeBattlefield = Nothing }) Nothing, Cmd.none )
 
         _ ->
-            crash
+            invalidMessageState
 
 
-base64ErrorToString : D64.Error -> String
-base64ErrorToString error =
-    case error of
-        D64.ValidationError ->
-            "ValidationError"
 
-        D64.InvalidByteSequence ->
-            "InvalidByteSequence "
+-- Subscriptions
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    case model of
+        Attacking _ ->
+            Time.every 100 Tick
+
+        _ ->
+            Sub.none
+
+
+
+-- View
 
 
 cellWidth =
@@ -563,13 +860,12 @@ layout =
 
 viewBoxStringCoords : String
 viewBoxStringCoords =
-    String.fromFloat (-cellWidth + cellWidth * 0.1)
-        ++ " "
-        ++ String.fromFloat -(cellHeight + 0)
-        ++ " "
-        ++ String.fromInt svgWidth
-        ++ " "
-        ++ String.fromInt svgHeight
+    String.join " "
+        [ String.fromFloat (-cellWidth + cellWidth * 0.1)
+        , String.fromFloat -(cellHeight + 0)
+        , String.fromInt svgWidth
+        , String.fromInt svgHeight
+        ]
 
 
 {-| Helper to convert points to SVG string coordinates
@@ -583,12 +879,7 @@ pointsToString points =
 -}
 pointToStringCoords : Point -> String
 pointToStringCoords ( x, y ) =
-    String.fromFloat x ++ "," ++ String.fromFloat y
-
-
-getCell : ( Hash, Hex ) -> Hex
-getCell =
-    Tuple.second
+    String.join "," [ String.fromFloat x, String.fromFloat y ]
 
 
 mapPolygonCorners : Hex -> List Point
@@ -599,11 +890,11 @@ mapPolygonCorners =
 hexGrid : Battlefield -> Html Msg
 hexGrid battlefield =
     let
-        toSvg : Hash -> String -> Svg Msg
-        toSvg hexLocation cornersCoords =
+        toSvg : Hash -> Cell -> Svg Msg
+        toSvg hexLocation cell =
             g
                 []
-                (toPolygon hexLocation cornersCoords)
+                (toPolygon hexLocation (pointsToString <| mapPolygonCorners <| cell.hex))
 
         isSelected : Hash -> Bool
         isSelected hash =
@@ -646,15 +937,14 @@ hexGrid battlefield =
                 , SvgEvents.onClick <|
                     Clicked hash
                 ]
-                []
+                [ Svg.text_ [] [ Svg.text "hello" ] ]
             ]
     in
     g
         []
     <|
-        List.map2 toSvg
-            (Dict.keys battlefield.map)
-            (List.map (pointsToString << mapPolygonCorners << getCell) (Dict.toList battlefield.map))
+        Dict.values <|
+            Dict.map toSvg battlefield.cells
 
 
 inputDecoder : D.Decoder Msg
@@ -682,9 +972,37 @@ viewImportButton _ =
     button [ Events.onClick Import ] [ text "Import/Export Game" ]
 
 
-viewAttackButton : State { a | waitingForStart : Allowed } b -> Html Msg
+viewCancelButton : State { a | waitingForStart : Allowed } b -> Html Msg
+viewCancelButton _ =
+    button [ Events.onClick Cancel ] [ text "Cancel" ]
+
+
+viewAttackButton : State { a | attacking : Allowed } b -> Html Msg
 viewAttackButton _ =
     button [ Events.onClick Attack ] [ text "Attack" ]
+
+
+viewBattlefield : State { a | attacking : Allowed } Battlefield -> Html Msg
+viewBattlefield state =
+    svg
+        [ version "1.1"
+        , x "0"
+        , y "0"
+        , Svg.Attributes.height (String.fromInt svgHeight)
+        , Svg.Attributes.width (String.fromInt svgWidth)
+        , viewBox viewBoxStringCoords
+        ]
+        [ state |> untag |> lazy hexGrid
+        ]
+
+
+
+-- Need to fix this viewMessages State a Battlefield -> Html Msg
+
+
+viewMessages (State battlefield) =
+    Html.ul [] <|
+        List.map (\string -> Html.li [] [ text string ]) battlefield.messages
 
 
 view : Model -> Browser.Document Msg
@@ -710,9 +1028,10 @@ view model =
                 GettingMapJson state ->
                     let
                         importButtonDisabled =
-                            state |> untag |> .maybeNewBattlefield |> MExtra.isNothing
+                            state |> untag |> .maybeNewBattlefield |> Maybe.Extra.isNothing
                     in
                     [ button [ Events.onClick Import, Attributes.disabled importButtonDisabled ] [ text "Import" ]
+                    , viewCancelButton state
                     , br [] []
                     , textarea
                         [ Events.on "input" inputDecoder
@@ -724,17 +1043,9 @@ view model =
 
                 WaitingForStart state ->
                     [ div []
-                        [ svg
-                            [ version "1.1"
-                            , x "0"
-                            , y "0"
-                            , Svg.Attributes.height (String.fromInt svgHeight)
-                            , Svg.Attributes.width (String.fromInt svgWidth)
-                            , viewBox viewBoxStringCoords
-                            ]
-                            [ state |> untag |> lazy hexGrid
-                            ]
+                        [ viewBattlefield state
                         , br [] []
+                        , viewAttackButton state
                         , viewNewButton state
                         , viewRestartButton state
                         , viewImportButton state
@@ -742,10 +1053,22 @@ view model =
                     ]
 
                 Attacking state ->
-                    [ br [] []
+                    [ viewBattlefield state
+                    , br [] []
                     , viewNewButton state
                     , viewRestartButton state
                     , viewImportButton state
+                    , viewMessages state
+                    ]
+
+                TurningOver state ->
+                    [ viewBattlefield state
+                    , br [] []
+                    , viewAttackButton state
+                    , viewNewButton state
+                    , viewRestartButton state
+                    , viewImportButton state
+                    , viewMessages state
                     ]
 
                 Ending state ->
@@ -754,6 +1077,7 @@ view model =
                     , viewNewButton state
                     , viewRestartButton state
                     , viewImportButton state
+                    , viewMessages state
                     ]
 
                 Error state ->
@@ -769,18 +1093,8 @@ view model =
     , body = body
     }
 
-
-subscriptions : Model -> Sub Msg
-subscriptions model =
-    -- case model.gameState of
-    -- Init ->
-    --     Time.every 1000 Tick
-    -- Attack AI ->
-    --     Time.every 1000 Tick
-    -- _ ->
-    Sub.none
-
-
+{-| This is the entry point.
+-}
 main : Program () Model Msg
 main =
     Browser.document
