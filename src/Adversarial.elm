@@ -12,8 +12,6 @@ module Adversarial exposing
 
 -}
 
-import Cons
-
 
 {-| This function implements the [minimax algorithm](https://en.wikipedia.org/wiki/Minimax).
 
