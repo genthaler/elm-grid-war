@@ -36,6 +36,7 @@ import Random.Dict
 import Random.List
 import Result.Extra as RExtra
 import RollingList
+import Search
 import Set
 import StateMachine as SM exposing (Allowed, State(..), untag)
 import Svg exposing (Svg, g, polygon, svg)
@@ -1092,6 +1093,7 @@ view model =
     { title = "Elm Grid War"
     , body = body
     }
+
 
 {-| This is the entry point.
 -}

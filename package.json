@@ -8,6 +8,7 @@
     "test": "tests"
   },
   "scripts": {
+    "justtest": "elm-test",
     "pretest": "elm-xref src/Main.elm && elm-docstyle --config_path=elm-docstyle.json --verbose src",
     "test": "elm-test && elm-doctest",
     "posttest": "elm-coverage",

@@ -8,4 +8,5 @@ dist/
 .DS_Store
 *.log
 .coverage
+.idea
 elm-grid-war.iml
