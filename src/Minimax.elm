@@ -4,9 +4,9 @@ module Minimax exposing (alphabeta)
 
 import Basics.Extra exposing (flip)
 import List.Extra
-import StateMachine  exposing (Allowed, State(..), map, untag)
+import StateMachine exposing (Allowed, State(..), map, untag)
 
-  
+
 type alias AlphaBetaState board ply value =
     { depth : Int
     , positiveInfinity : value
@@ -19,15 +19,13 @@ type alias AlphaBetaState board ply value =
     , heuristic : board -> value
     , generator : board -> List ply
     , doPly : ply -> board -> board
-    , undoPly : ply -> board -> board 
-    
-    , callStack : List (List ply)
+    , undoPly : ply -> board -> board
     , board : board
     }
 
 
 type AlphaBetaStateMachine board ply value
-    = Generating (State { computing : Allowed } (AlphaBetaState board ply value))
+    = Generating (State { computing : Allowed } ({AlphaBetaState board ply value | callStack : List (List ply)}))
     | Computing (State { sorting : Allowed } (AlphaBetaState board ply value))
     | Sorting (State { generating : Allowed, deciding : Allowed } (AlphaBetaState board ply value))
     | Deciding (State { ending : Allowed } (AlphaBetaState board ply value))
@@ -54,9 +52,9 @@ toDeciding =
     Deciding << State << untag
 
 
-toEnding : State { a | deciding : Allowed } (AlphaBetaState board ply value) -> AlphaBetaStateMachine board ply value
-toEnding =
-    Deciding << State << untag
+toEnding : State { a | ending : Allowed } b -> ply -> AlphaBetaStateMachine board ply value
+toEnding _ =
+    Ending << State
 
 
 {-| This function implements the [minimax algorithm with alpha-beta pruning](https://en.wikipedia.org/wiki/Alpha%E2%80%93beta_pruning).
@@ -114,15 +112,18 @@ toEnding =
     Could create 2 variants of the algorithm.
     Need an heuristicPly to calculate a delta on the heuristic score
     How do we deal with probabilistic moves?
-    It might be a bit much to as for both a doPly+undoPly as well as an evaluatePly?
+    It might be a bit much to ask for both a doPly+undoPly as well as an evaluatePly?
     I have a space/time tradeoff to make - I want to be able to sort the list of moves before depth-first search,
     since this is an optimisation that can cut the time down to about half.
     But that means I either have to store all the boards or calculate the heuristic of a given board.
     Hang on, these are just heuristics! Just calculate the heuristic of the move. Sort those. Done!
-    In fact, never need to calculate heuristic of board, just start from "zero".
-    Only need the board in order to generate new moves.
+        In fact, never need to calculate heuristic of board, just start from "zero".
+        Only need the board in order to generate new moves.
+        This only works if it makes sense to calculate heuristics based on the move without the context of the whole board
+        Could maybe assign value to each piece that can be affected, so one can calculate the delta that way.
+        It's all very game specific. So might still be better to calculate heuristic of the whole baord
 
-    The costly things to do are generating moves and calculating heuristics. Sorting and calculating cutoff shouldn't be too hard.
+    The costly things to do are generating moves and calculating heuristics. Sorting and calculating cutoff shouldn't be too expensive.
     But sorting and calculating cutoff happen between the others, so maybe deserve their own states.
 
 -}
@@ -172,16 +173,22 @@ step sm =
             in
             toComputing <| State <| { state | callStack = state.generator board :: state.callStack }
 
-        Deciding (State state) ->
-            case state.callStack of
+        Computing ((State alphaBetaState) as state) ->
+            sm
+
+        Sorting ((State alphaBetaState) as state) ->
+            
+
+        Deciding ((State alphaBetaState) as state) ->
+            case alphaBetaState.callStack of
                 [ [ ply ] ] ->
-                    toEnding <| State <| ply
+                    toEnding state ply
 
                 _ ->
                     sm
+        Ending ((State alphaBetaState) as state) ->
+            sm
 
-        _ ->
-            Debug.todo ""
 
 
 alphabeta0 : AlphaBetaState board ply value -> AlphaBetaState board ply value
