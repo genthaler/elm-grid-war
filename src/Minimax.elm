@@ -2,9 +2,20 @@ module Minimax exposing (alphabeta)
 
 {-| -}
 
-import Basics.Extra exposing (flip)
-import List.Extra
 import StateMachine exposing (Allowed, State(..), map, untag)
+
+
+type alias CallFrame board ply value =
+    { alpha : value
+    , beta : value
+    , minimax : Bool
+    , board : board
+    , plies :
+        List
+            { ply : ply
+            , value : Maybe value
+            }
+    }
 
 
 type alias AlphaBetaState board ply value =
@@ -13,23 +24,19 @@ type alias AlphaBetaState board ply value =
     , zero : value
     , negativeInfinity : value
     , comparator : value -> value -> Order
-    , alpha : value
-    , beta : value
-    , minimax : Bool
-    , heuristic : board -> value
+    , heuristic : board -> ply -> value
     , generator : board -> List ply
     , doPly : ply -> board -> board
-    , undoPly : ply -> board -> board
-    , board : board
+    , callStack : List (CallFrame board ply value)
     }
 
 
 type AlphaBetaStateMachine board ply value
-    = Generating (State { computing : Allowed } ({AlphaBetaState board ply value | callStack : List (List ply)}))
+    = Generating (State { computing : Allowed } (AlphaBetaState board ply value))
     | Computing (State { sorting : Allowed } (AlphaBetaState board ply value))
     | Sorting (State { generating : Allowed, deciding : Allowed } (AlphaBetaState board ply value))
     | Deciding (State { ending : Allowed } (AlphaBetaState board ply value))
-    | Ending (State { done : Allowed } ply)
+    | Ending (State { done : Allowed } (Result ( AlphaBetaState board ply value, String ) ply))
 
 
 toGenerating : AlphaBetaState board ply value -> AlphaBetaStateMachine board ply value
@@ -52,7 +59,7 @@ toDeciding =
     Deciding << State << untag
 
 
-toEnding : State { a | ending : Allowed } b -> ply -> AlphaBetaStateMachine board ply value
+toEnding : State a b -> Result ( AlphaBetaState board ply value, String ) ply -> AlphaBetaStateMachine board ply value
 toEnding _ =
     Ending << State
 
@@ -121,7 +128,7 @@ toEnding _ =
         Only need the board in order to generate new moves.
         This only works if it makes sense to calculate heuristics based on the move without the context of the whole board
         Could maybe assign value to each piece that can be affected, so one can calculate the delta that way.
-        It's all very game specific. So might still be better to calculate heuristic of the whole baord
+        It's all very game specific. So might still be better to calculate heuristic of the whole board
 
     The costly things to do are generating moves and calculating heuristics. Sorting and calculating cutoff shouldn't be too expensive.
     But sorting and calculating cutoff happen between the others, so maybe deserve their own states.
@@ -133,118 +140,163 @@ alphabeta :
     -> value
     -> value
     -> (value -> value -> Order)
-    -> (board -> value)
+    -> (board -> ply -> value)
     -> (board -> List ply)
-    -> (ply -> board -> board)
     -> (ply -> board -> board)
     -> board
     -> AlphaBetaStateMachine board ply value
-alphabeta depth positiveInfinity zero negativeInfinity comparator heuristic generator doPly undoPly board =
+alphabeta depth positiveInfinity zero negativeInfinity comparator heuristic generator doPly board =
     toGenerating <|
-        AlphaBetaState
-            depth
-            positiveInfinity
-            zero
-            negativeInfinity
-            comparator
-            positiveInfinity
-            negativeInfinity
-            True
-            heuristic
-            generator
-            doPly
-            undoPly
-            []
-            board
+        { depth = depth
+        , positiveInfinity = positiveInfinity
+        , zero = zero
+        , negativeInfinity = negativeInfinity
+        , comparator = comparator
+        , heuristic = heuristic
+        , generator = generator
+        , doPly = doPly
+        , callStack =
+            [ { alpha = positiveInfinity
+              , beta = negativeInfinity
+              , minimax = True
+              , board = board
+              , plies = []
+              }
+            ]
+        }
 
 
 step : AlphaBetaStateMachine board ply value -> AlphaBetaStateMachine board ply value
 step sm =
     case sm of
-        Generating (State state) ->
-            let
-                board =
-                    case state.callStack of
-                        [] ->
-                            state.board
+        Generating ((State alphaBetaState) as state) ->
+            case alphaBetaState.callStack of
+                [] ->
+                    toEnding state (Err ( alphaBetaState, "Unexpectedly empty callstack" ))
 
-                        _ ->
-                            state.callStack |> List.filterMap List.head |> List.foldl state.doPly state.board
-            in
-            toComputing <| State <| { state | callStack = state.generator board :: state.callStack }
+                callFrame :: callStack ->
+                    toComputing <|
+                        State <|
+                            { alphaBetaState
+                                | callStack =
+                                    { callFrame
+                                        | plies = callFrame.board |> alphaBetaState.generator |> List.map (\ply -> { ply = ply, value = Nothing })
+                                    }
+                                        :: callStack
+                            }
 
         Computing ((State alphaBetaState) as state) ->
-            sm
+            case alphaBetaState.callStack of
+                [] ->
+                    toEnding state (Err ( alphaBetaState, "Unexpectedly empty callstack" ))
+
+                callFrame :: callStack ->
+                    toSorting <| State <| { alphaBetaState | callStack = { callFrame | plies = List.map (\plyValue -> { plyValue | value = Just (alphaBetaState.heuristic callFrame.board plyValue.ply) }) callFrame.plies } :: callStack }
 
         Sorting ((State alphaBetaState) as state) ->
-            
+            case alphaBetaState.callStack of
+                [] ->
+                    toEnding state (Err ( alphaBetaState, "Unexpectedly empty callstack" ))
+
+                callFrame :: callStack ->
+                    toDeciding <|
+                        State <|
+                            { alphaBetaState
+                                | callStack =
+                                    { callFrame
+                                        | plies =
+                                            callFrame.plies
+                                                |> List.sortWith
+                                                    (\a b ->
+                                                        alphaBetaState.comparator
+                                                            (Maybe.withDefault alphaBetaState.zero a.value)
+                                                            (Maybe.withDefault alphaBetaState.zero b.value)
+                                                    )
+                                    }
+                                        :: callStack
+                            }
 
         Deciding ((State alphaBetaState) as state) ->
             case alphaBetaState.callStack of
-                [ [ ply ] ] ->
-                    toEnding state ply
+                [] ->
+                    toEnding state (Err ( alphaBetaState, "Unexpectedly empty callstack" ))
 
-                _ ->
-                    sm
-        Ending ((State alphaBetaState) as state) ->
+                callFrame :: callStack ->
+                    case callFrame.plies of
+                        [] ->
+                            toDeciding <|
+                                State <|
+                                    { alphaBetaState
+                                        | depth = alphaBetaState.depth + 1
+                                        , callStack =
+                                            { callFrame
+                                                | minimax = not callFrame.minimax
+                                            }
+                                                :: callStack
+                                    }
+
+                        plyValue :: [] ->
+                            toEnding state (Ok plyValue.ply)
+
+                        _ ->
+                            toDeciding <|
+                                State <|
+                                    { alphaBetaState | callStack = callStack }
+
+        --     toGenerating
+        -- <|
+        --     State <|
+        --         { alphaBetaState | callStack = callStack, depth = alphaBetaState.depth - 1, minimax = not alphaBetaState.minimax }
+        Ending _ ->
             sm
 
 
 
-alphabeta0 : AlphaBetaState board ply value -> AlphaBetaState board ply value
-alphabeta0 state =
-    if state.depth == 0 then
-        state.heuristic state.board
-
-    else
-        case state.generator state.board of
-            [] ->
-                state.heuristic state.board
-
-            children0 ->
-                case state.minimax of
-                    True ->
-                        let
-                            cutoff value alpha1 beta1 children1 =
-                                case children1 of
-                                    [] ->
-                                        value
-
-                                    child :: children2 ->
-                                        let
-                                            value2 =
-                                                Basics.max value (alphabeta0 (state.depth - 1) alpha1 beta1 (not state.minimax) child)
-
-                                            alpha2 =
-                                                Basics.max value2 alpha1
-                                        in
-                                        if alpha2 >= beta1 then
-                                            value2
-
-                                        else
-                                            cutoff value2 alpha2 beta1 children2
-                        in
-                        cutoff state.negativeInfinity state.alpha state.beta (state.generator state.board)
-
-                    False ->
-                        let
-                            cutoff value alpha1 beta1 children1 =
-                                case children1 of
-                                    [] ->
-                                        value
-
-                                    child :: children2 ->
-                                        let
-                                            value2 =
-                                                Basics.max value (alphabeta0 (state.depth - 1) alpha1 beta1 (not state.minimax) child)
-
-                                            beta2 =
-                                                Basics.max value2 beta1
-                                        in
-                                        if alpha1 >= beta2 then
-                                            value2
-
-                                        else
-                                            cutoff value2 alpha1 beta2 children2
-                        in
-                        cutoff state.positiveInfinity state.alpha state.beta children0
+-- alphabeta0 : AlphaBetaState board ply value -> AlphaBetaState board ply value
+-- alphabeta0 state =
+--     if state.depth == 0 then
+--         state.heuristic state.board
+--     else
+--         case state.generator state.board of
+--             [] ->
+--                 state.heuristic state.board
+--             children0 ->
+--                 case state.minimax of
+--                     True ->
+--                         let
+--                             cutoff value alpha1 beta1 children1 =
+--                                 case children1 of
+--                                     [] ->
+--                                         value
+--                                     child :: children2 ->
+--                                         let
+--                                             value2 =
+--                                                 Basics.max value (alphabeta0 (state.depth - 1) alpha1 beta1 (not state.minimax) child)
+--                                             alpha2 =
+--                                                 Basics.max value2 alpha1
+--                                         in
+--                                         if alpha2 >= beta1 then
+--                                             value2
+--                                         else
+--                                             cutoff value2 alpha2 beta1 children2
+--                         in
+--                         cutoff state.negativeInfinity state.alpha state.beta children0
+--                     False ->
+--                         let
+--                             cutoff value alpha1 beta1 children1 =
+--                                 case children1 of
+--                                     [] ->
+--                                         value
+--                                     child :: children2 ->
+--                                         let
+--                                             value2 =
+--                                                 Basics.max value (alphabeta0 (state.depth - 1) alpha1 beta1 (not state.minimax) child)
+--                                             beta2 =
+--                                                 Basics.max value2 beta1
+--                                         in
+--                                         if alpha1 >= beta2 then
+--                                             value2
+--                                         else
+--                                             cutoff value2 alpha1 beta2 children2
+--                         in
+--                         cutoff state.positiveInfinity state.alpha state.beta children0

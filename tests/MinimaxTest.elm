@@ -1,15 +1,15 @@
-module AdversarialTest exposing (all)
+module MinimaxTest exposing (all)
 
-import Adversarial exposing (..)
 import Expect exposing (Expectation)
 import Fuzz exposing (Fuzzer, int, list, string)
 import Main exposing (..)
+import Minimax exposing (..)
 import Test exposing (..)
 
 
 all : Test
 all =
-    describe "Adversarial Search"
+    describe "Minimax"
         [ describe "Minimax"
             [ test "Already there" <|
                 \_ ->
