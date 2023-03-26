@@ -7,6 +7,12 @@ import Minimax exposing (..)
 import Test exposing (..)
 
 
+
+{-
+   I need to have a minimal game board, 
+-}
+
+
 all : Test
 all =
     describe "Minimax"

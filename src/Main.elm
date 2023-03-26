@@ -430,16 +430,8 @@ randomCellRef seed0 (( hash, hex ) as cellRef0) =
     ( seed1, cellRef1 )
 
 
-mapHeight =
-    10
-
-
-mapWidth =
-    10
-
-
-initBattlefield : Int -> Battlefield
-initBattlefield seedSeed =
+initBattlefield : Int -> Int -> Int -> Battlefield
+initBattlefield mapHeight mapWidth seedSeed =
     let
         seed =
             Random.initialSeed seedSeed
@@ -719,7 +711,7 @@ update msg model =
             ( toGettingSeed (State { maybeBattlefield = Nothing }) Nothing, Cmd.none )
 
         ( GettingTimeForNewSeed state, Tick posix ) ->
-            ( toWaitingForStart state (initBattlefield <| Time.posixToMillis posix), Cmd.none )
+            ( toWaitingForStart state (initBattlefield 10 10 (Time.posixToMillis posix)), Cmd.none )
 
         ( GettingSeed state, SeedChanged seedSeed ) ->
             ( toGettingSeed state seedSeed, Cmd.none )
@@ -727,7 +719,7 @@ update msg model =
         ( GettingSeed state, UseSeed ) ->
             case state |> untag |> .seedSeed of
                 Just seedSeed ->
-                    ( toWaitingForStart state <| initBattlefield <| seedSeed, Cmd.none )
+                    ( toWaitingForStart state <| initBattlefield 10 10 seedSeed, Cmd.none )
 
                 Nothing ->
                     invalidMessageState
