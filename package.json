@@ -37,6 +37,7 @@
     "parcel": "2.8.3"
   },
   "devDependencies": {
+    "@parcel/transformer-elm": "^2.8.3",
     "elm-coverage": "0.4.1",
     "elm-docstyle": "1.0.0",
     "elm-doctest": "0.4.1",
