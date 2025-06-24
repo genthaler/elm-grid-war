@@ -33,7 +33,7 @@
   "homepage": "https://github.com/genthaler/elm-grid-war#readme",
   "dependencies": {
     "elm": "^0.19.1",
-    "parcel-bundler": "^1.12.3"
+    "parcel-bundler": "^1.12.5"
   },
   "devDependencies": {
     "elm-coverage": "^0.2.0",
