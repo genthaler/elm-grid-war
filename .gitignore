@@ -10,3 +10,4 @@ dist/
 .coverage
 .idea
 elm-grid-war.iml
+.parcel-cache
