@@ -10,5 +10,5 @@ dist/
 .coverage
 elm-grid-war.iml
 
-# Parcel
-.parcel-cache
+# Parcel files
+.parcel-cache/
