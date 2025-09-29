@@ -37,7 +37,7 @@
     "elm-verify-examples": "^5.0.0",
     "gh-pages": "^5.0.0",
     "parcel": "^2.12.0",
-    "serve": "^14.2.4",
+    "serve": "^14.2.5",
     "shx": "^0.4.0"
   }
 }
