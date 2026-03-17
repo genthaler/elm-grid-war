@@ -29,6 +29,11 @@
     "url": "https://github.com/genthaler/elm-grid-war/issues"
   },
   "homepage": "https://github.com/genthaler/elm-grid-war#readme",
+  "overrides": {
+    "node-elm-compiler": {
+      "cross-spawn": "6.0.6"
+    }
+  },
   "devDependencies": {
     "@parcel/transformer-elm": "^2.16.4",
     "elm": "^0.19.1-6",
